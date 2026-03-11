@@ -1,61 +1,14 @@
-﻿[build]
+[build]
+  command = "npm run check"
   publish = "."
   functions = "netlify/functions"
 
 [functions]
   node_bundler = "esbuild"
 
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-
 [[redirects]]
-  from = "/api/login"
-  to = "/.netlify/functions/login"
-  status = 200
-  force = true
-  [redirects.rate_limit]
-    window_limit = 10
-    window_size = 60
-    aggregate_by = ["ip", "domain"]
-
-[[redirects]]
-  from = "/api/import-local"
-  to = "/.netlify/functions/import-local"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/audit-log"
-  to = "/.netlify/functions/audit-log"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/bootstrap"
-  to = "/.netlify/functions/bootstrap"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/logout"
-  to = "/.netlify/functions/logout"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/state"
-  to = "/.netlify/functions/state"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/health"
-  to = "/.netlify/functions/health"
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
   status = 200
   force = true
 
