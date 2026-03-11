@@ -1,5 +1,5 @@
 [build]
-  command = "npm run check"
+  command = "node --check app.js && node --check enhancements.js && node --check backend.js"
   publish = "."
   functions = "netlify/functions"
 

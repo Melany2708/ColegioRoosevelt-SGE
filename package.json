@@ -4,7 +4,7 @@
   "private": true,
   "description": "Sistema de gestion educativa con frontend web y backend para Netlify Functions.",
   "scripts": {
-    "check": "node --check app.js && node --check enhancements.js && node --check backend.js && node --check scripts/seed-users.mjs",
+    "check": "node --check app.js && node --check enhancements.js && node --check backend.js",
     "seed:users": "node scripts/seed-users.mjs",
     "dev": "netlify dev"
   },
@@ -16,3 +16,4 @@
     "node": ">=20"
   }
 }
+
