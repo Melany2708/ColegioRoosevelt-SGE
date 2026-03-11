@@ -1,0 +1,1647 @@
+﻿const originalCreateDefaultData = createDefaultData;
+const originalLoadFromStorage = loadFromStorage;
+const originalCacheDom = cacheDom;
+const originalHandleDynamicSubmit = handleDynamicSubmit;
+const originalHandleDynamicChange = handleDynamicChange;
+const originalHandleDynamicClick = handleDynamicClick;
+
+if (!MODULES.some((moduleItem) => moduleItem.id === "settings")) {
+  MODULES.push({ id: "settings", label: "Ajustes", hint: "Tema y colegio" });
+}
+
+USERS.admin.name = "Melanie Castro Jones";
+USERS.direccion.name = "Valeria Stone";
+USERS.tesoreria.name = "Rosa Medina";
+USERS.secretaria.name = "Andrea Rojas";
+
+ROLE_ACCESS.Administrador = MODULES.map((moduleItem) => moduleItem.id);
+ROLE_ACCESS.Direccion = Array.from(new Set([...(ROLE_ACCESS.Direccion || []), "settings"]));
+ROLE_ACCESS.Secretaria = Array.from(new Set([...(ROLE_ACCESS.Secretaria || []), "settings"]));
+
+state.documentStudentId = state.documentStudentId || null;
+state.documentType = state.documentType || "Constancia de estudios";
+state.selectedScheduleId = state.selectedScheduleId || null;
+state.supplyStudentId = state.supplyStudentId || null;
+
+createDefaultData = function createEnhancedDefaultData() {
+  return getEnhancedDefaultData();
+};
+
+loadFromStorage = function loadFromStorageEnhanced(key, fallbackValue) {
+  const value = originalLoadFromStorage(key, fallbackValue);
+  if (key === STORAGE_KEYS.data) {
+    return hydrateData(value);
+  }
+  return value;
+};
+
+cacheDom = function cacheDomEnhanced() {
+  originalCacheDom();
+  refs.sections.settings = document.getElementById("settingsSection");
+};
+
+renderApp = function renderAppEnhanced() {
+  if (!state.session) {
+    refs.loginView.classList.remove("hidden");
+    refs.appShell.classList.add("hidden");
+    refs.loginForm.reset();
+    return;
+  }
+
+  refs.loginView.classList.add("hidden");
+  refs.appShell.classList.remove("hidden");
+
+  state.data = hydrateData(state.data);
+  syncSessionIdentity();
+  ensureSelectedStudent();
+  ensureSelectedSchedule();
+  ensureValidActiveSection();
+  applyThemePreset();
+  renderChrome();
+  renderSections();
+  applyRoleVisibility();
+  refs.globalSearch.value = state.search;
+};
+
+renderChrome = function renderChromeEnhanced() {
+  refs.schoolName.textContent = state.data.school.name;
+  document.querySelectorAll(".brand-mark").forEach((element) => {
+    element.textContent = state.data.school.logo;
+  });
+  refs.sidebarRole.textContent = state.session.role;
+  refs.sidebarUser.textContent = `${getSessionDisplayName()} (${state.session.username})`;
+  refs.topbarDate.textContent = `Actualizado ${formatDateLong(new Date().toISOString())}`;
+  renderSidebar();
+};
+
+renderSidebar = function renderSidebarEnhanced() {
+  const allowed = getAllowedSections();
+  refs.navMenu.innerHTML = MODULES
+    .filter((moduleItem) => allowed.includes(moduleItem.id))
+    .map((moduleItem) => {
+      const activeClass = state.activeSection === moduleItem.id ? "is-active" : "";
+      return `
+        <button class="nav-link ${activeClass}" type="button" data-nav-target="${moduleItem.id}">
+          <span>${escapeHtml(moduleItem.label)}</span>
+          <small>${escapeHtml(moduleItem.hint)}</small>
+        </button>
+      `;
+    })
+    .join("");
+};
+
+renderSections = function renderSectionsEnhanced() {
+  renderDashboardSection();
+  renderAdmissionsSection();
+  renderProfileSection();
+  renderAcademicSection();
+  renderPlanningSection();
+  renderStaffSection();
+  renderScheduleSection();
+  renderFinanceSection();
+  renderAccountingSection();
+  renderSuppliesSection();
+  renderActivitiesSection();
+  renderReportsSection();
+  renderDocumentsSection();
+  renderSecuritySection();
+  renderSettingsSection();
+};
+
+applyRoleVisibility = function applyRoleVisibilityEnhanced() {
+  const allowed = getAllowedSections();
+  Object.entries(refs.sections).forEach(([sectionId, element]) => {
+    if (!element) {
+      return;
+    }
+    const isAllowed = allowed.includes(sectionId);
+    const isActive = state.activeSection === sectionId;
+    element.classList.toggle("hidden", !isAllowed);
+    element.classList.toggle("is-visible", isAllowed && isActive);
+  });
+};
+
+ensureValidActiveSection = function ensureValidActiveSectionEnhanced() {
+  const allowed = getAllowedSections();
+  if (!allowed.includes(state.activeSection)) {
+    state.activeSection = allowed[0] || "dashboard";
+  }
+};
+
+navigateTo = function navigateToEnhanced(sectionId) {
+  const allowed = getAllowedSections();
+  if (!allowed.includes(sectionId)) {
+    showToast("Tu rol no tiene acceso a ese modulo.");
+    return;
+  }
+  state.activeSection = sectionId;
+  renderSidebar();
+  applyRoleVisibility();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+handleLogin = function handleLoginEnhanced(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const username = normalizeText(formData.get("username"));
+  const password = String(formData.get("password") || "");
+  const user = USERS[username];
+
+  if (!user || user.password !== password) {
+    showToast("Credenciales invalidas. Usa uno de los usuarios demo visibles en login.");
+    return;
+  }
+
+  const displayName = username === "admin" ? state.data.school.adminName : user.name;
+  state.session = {
+    username: user.username,
+    name: displayName,
+    role: user.role,
+    startedAt: new Date().toISOString()
+  };
+  state.activeSection = (ROLE_ACCESS[user.role] && ROLE_ACCESS[user.role][0]) || "dashboard";
+  saveToStorage(STORAGE_KEYS.session, state.session);
+  recordLog({ ...user, name: displayName }, "Inicio de sesion");
+  renderApp();
+  showToast(`Bienvenido(a), ${displayName}.`);
+};
+
+handleDynamicClick = function handleDynamicClickEnhanced(event) {
+  const clearTemplateButton = event.target.closest("[data-clear-document-template]");
+  if (clearTemplateButton) {
+    state.data.school.documentTemplate = "";
+    persistData();
+    renderDocumentsSection();
+    renderSettingsSection();
+    showToast("La plantilla de constancias fue retirada.");
+    return;
+  }
+
+  const addScheduleRowButton = event.target.closest("[data-add-schedule-row]");
+  if (addScheduleRowButton) {
+    const schedule = getSelectedSchedule();
+    if (!schedule) {
+      showToast("Primero registra o selecciona un horario.");
+      return;
+    }
+    schedule.rows.push(["", "", "", "", "", ""]);
+    persistData();
+    renderScheduleSection();
+    showToast("Se agrego un bloque editable al horario.");
+    return;
+  }
+
+  originalHandleDynamicClick(event);
+};
+
+handleDynamicChange = function handleDynamicChangeEnhanced(event) {
+  if (event.target.id === "scheduleSelect") {
+    state.selectedScheduleId = event.target.value;
+    renderScheduleSection();
+    return;
+  }
+
+  if (event.target.id === "supplyStudentSelect") {
+    state.supplyStudentId = event.target.value;
+    renderSuppliesSection();
+    return;
+  }
+
+  if (event.target.id === "documentTemplateInput") {
+    const [file] = Array.from(event.target.files || []);
+    if (!file) {
+      return;
+    }
+    readFileAsDataUrl(file).then((dataUrl) => {
+      state.data.school.documentTemplate = dataUrl;
+      persistData();
+      renderDocumentsSection();
+      renderSettingsSection();
+      showToast("Plantilla de constancias cargada correctamente.");
+    }).catch(() => {
+      showToast("No se pudo leer la imagen seleccionada.");
+    });
+    return;
+  }
+
+  originalHandleDynamicChange(event);
+};
+handleDynamicSubmit = function handleDynamicSubmitEnhanced(event) {
+  if (event.target.id === "studentForm") {
+    originalHandleDynamicSubmit(event);
+    const student = getStudentById(state.selectedStudentId);
+    if (student) {
+      const supply = getStudentSupply(student.id);
+      supply.deliveredAt = supply.deliveredAt || "";
+      supply.deliveryNotes = supply.deliveryNotes || "Pendiente de entrega.";
+      state.supplyStudentId = student.id;
+      persistData();
+    }
+    return;
+  }
+
+  if (event.target.id === "staffForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const role = String(formData.get("role") || "Administrativo");
+    const person = {
+      id: nextStaffId(role),
+      name: String(formData.get("name") || "").trim(),
+      role,
+      area: String(formData.get("area") || "").trim(),
+      courses: String(formData.get("courses") || "-").trim() || "-",
+      grades: String(formData.get("grades") || "-").trim() || "-",
+      schedule: String(formData.get("schedule") || "").trim(),
+      tenure: String(formData.get("tenure") || "Ingreso reciente").trim(),
+      email: String(formData.get("email") || "").trim(),
+      phone: String(formData.get("phone") || "").trim()
+    };
+
+    state.data.staff.push(person);
+    if (role === "Docente") {
+      state.data.planning.push({
+        teacherId: person.id,
+        teacher: person.name,
+        area: person.area,
+        status: "Pendiente",
+        deliveredAt: "-",
+        compliance: 0
+      });
+    }
+
+    persistData();
+    recordLog(state.session, `Registro de personal ${person.name}`);
+    renderStaffSection();
+    showToast("Personal registrado correctamente.");
+    return;
+  }
+
+  if (event.target.id === "suppliesForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const studentId = String(formData.get("studentId") || "");
+    const supply = getStudentSupply(studentId);
+    supply.status = String(formData.get("status") || supply.status);
+    supply.deliveredAt = String(formData.get("deliveredAt") || "");
+    supply.delivered = splitList(String(formData.get("delivered") || ""));
+    supply.missing = splitList(String(formData.get("missing") || ""));
+    supply.deliveryNotes = String(formData.get("deliveryNotes") || "").trim();
+    state.supplyStudentId = studentId;
+    persistData();
+    recordLog(state.session, `Actualizacion de utiles para ${getStudentById(studentId)?.fullName || studentId}`);
+    renderSuppliesSection();
+    renderProfileSection();
+    showToast("Entrega de utiles actualizada.");
+    return;
+  }
+
+  if (event.target.id === "scheduleCreateForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const schedule = {
+      id: nextScheduleId(),
+      sectionKey: String(formData.get("sectionKey") || "").trim(),
+      room: String(formData.get("room") || "").trim(),
+      days: ["Hora", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes"],
+      rows: [
+        ["7:30", "", "", "", "", ""],
+        ["8:20", "", "", "", "", ""],
+        ["9:10", "", "", "", "", ""]
+      ]
+    };
+    state.data.schedules.push(schedule);
+    state.selectedScheduleId = schedule.id;
+    persistData();
+    recordLog(state.session, `Registro de horario ${schedule.sectionKey}`);
+    renderScheduleSection();
+    showToast("Horario creado y listo para editar.");
+    return;
+  }
+
+  if (event.target.id === "scheduleEditorForm") {
+    event.preventDefault();
+    const schedule = getSelectedSchedule();
+    if (!schedule) {
+      showToast("No hay horario seleccionado.");
+      return;
+    }
+
+    const formData = new FormData(event.target);
+    schedule.sectionKey = String(formData.get("sectionKey") || schedule.sectionKey).trim();
+    schedule.room = String(formData.get("room") || schedule.room).trim();
+    const rowCount = Number(formData.get("rowCount") || schedule.rows.length);
+    const nextRows = [];
+    for (let index = 0; index < rowCount; index += 1) {
+      nextRows.push([
+        String(formData.get(`row-${index}-0`) || "").trim(),
+        String(formData.get(`row-${index}-1`) || "").trim(),
+        String(formData.get(`row-${index}-2`) || "").trim(),
+        String(formData.get(`row-${index}-3`) || "").trim(),
+        String(formData.get(`row-${index}-4`) || "").trim(),
+        String(formData.get(`row-${index}-5`) || "").trim()
+      ]);
+    }
+    schedule.rows = nextRows;
+    persistData();
+    recordLog(state.session, `Edicion de horario ${schedule.sectionKey}`);
+    renderScheduleSection();
+    showToast("Horario guardado correctamente.");
+    return;
+  }
+
+  if (event.target.id === "settingsForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    state.data.school.name = String(formData.get("schoolName") || state.data.school.name).trim();
+    state.data.school.city = String(formData.get("city") || state.data.school.city).trim();
+    state.data.school.logo = String(formData.get("logo") || state.data.school.logo).trim() || "CPR";
+    state.data.school.adminName = String(formData.get("adminName") || state.data.school.adminName).trim();
+    state.data.school.theme = String(formData.get("theme") || state.data.school.theme || "roosevelt");
+    syncSessionIdentity();
+    persistData();
+    recordLog(state.session, "Actualizacion de ajustes generales");
+    renderApp();
+    navigateTo("settings", false);
+    showToast("Ajustes guardados correctamente.");
+    return;
+  }
+
+  originalHandleDynamicSubmit(event);
+};
+
+renderStaffSection = function renderStaffSectionEnhanced() {
+  const totalTeachers = state.data.staff.filter((person) => person.role === "Docente").length;
+  const totalAdministrative = state.data.staff.length - totalTeachers;
+
+  refs.sections.staff.innerHTML = `
+    ${renderSectionHeader("Docentes y personal", "Ahora incluye el formulario de registro para docentes y personal administrativo.")}
+
+    <div class="inline-metrics">
+      <span class="tag">${totalTeachers} docentes</span>
+      <span class="tag">${totalAdministrative} administrativos</span>
+      <span class="tag">${state.data.staff.length} registros activos</span>
+    </div>
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Registrar personal</h3>
+        <form id="staffForm" class="form-grid">
+          <label class="field">
+            <span>Tipo</span>
+            <select name="role">
+              <option value="Docente">Docente</option>
+              <option value="Administrativo">Administrativo</option>
+              <option value="Secretaria">Secretaria</option>
+              <option value="Tesoreria">Tesoreria</option>
+              <option value="Coordinacion academica">Coordinacion academica</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Nombre completo</span>
+            <input name="name" type="text" required>
+          </label>
+          <label class="field">
+            <span>Area o especialidad</span>
+            <input name="area" type="text" required>
+          </label>
+          <label class="field">
+            <span>Correo</span>
+            <input name="email" type="email" required>
+          </label>
+          <label class="field">
+            <span>Telefono</span>
+            <input name="phone" type="text">
+          </label>
+          <label class="field">
+            <span>Horario asignado</span>
+            <input name="schedule" type="text" placeholder="Lun a Vie 7:30 - 13:30" required>
+          </label>
+          <label class="field">
+            <span>Cursos asignados</span>
+            <input name="courses" type="text" placeholder="Solo si aplica">
+          </label>
+          <label class="field">
+            <span>Grados asignados</span>
+            <input name="grades" type="text" placeholder="Solo si aplica">
+          </label>
+          <label class="field field-full">
+            <span>Historial laboral</span>
+            <input name="tenure" type="text" placeholder="2026 - actual">
+          </label>
+          <div class="field field-full">
+            <button class="button button-primary" type="submit">Registrar personal</button>
+          </div>
+        </form>
+      </article>
+
+      <article class="table-card">
+        <h3>Listado de personal</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th>Area</th>
+                <th>Cursos / grados</th>
+                <th>Horario</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${state.data.staff.map((person) => `
+                <tr>
+                  <td>${escapeHtml(person.id)}</td>
+                  <td>${escapeHtml(person.name)}<br><small>${escapeHtml(person.email)}</small></td>
+                  <td>${escapeHtml(person.role)}</td>
+                  <td>${escapeHtml(person.area)}</td>
+                  <td>${escapeHtml(`${person.courses} · ${person.grades}`)}</td>
+                  <td>${escapeHtml(person.schedule)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  `;
+};
+
+renderScheduleSection = function renderScheduleSectionEnhanced() {
+  ensureSelectedSchedule();
+  const schedule = getSelectedSchedule();
+  if (!schedule) {
+    refs.sections.schedule.innerHTML = `<article class="empty-card"><h3>Sin horarios</h3><p>Registra el primer horario para empezar a editarlo.</p></article>`;
+    return;
+  }
+
+  refs.sections.schedule.innerHTML = `
+    ${renderSectionHeader("Horarios escolares", "Modulo independiente para crear, editar e imprimir horarios por seccion.")}
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Crear horario</h3>
+        <form id="scheduleCreateForm" class="form-grid">
+          <label class="field">
+            <span>Seccion</span>
+            <input name="sectionKey" type="text" placeholder="Primaria 5° A" required>
+          </label>
+          <label class="field">
+            <span>Aula</span>
+            <input name="room" type="text" placeholder="Aula 205" required>
+          </label>
+          <div class="field field-full">
+            <button class="button button-primary" type="submit">Crear horario</button>
+          </div>
+        </form>
+
+        <div class="divider"></div>
+
+        <h3>Horarios registrados</h3>
+        <div class="schedule-toolbar">
+          <label class="field" style="flex:1;">
+            <span>Editar horario</span>
+            <select id="scheduleSelect">
+              ${state.data.schedules.map((item) => `<option value="${item.id}" ${item.id === schedule.id ? "selected" : ""}>${escapeHtml(item.sectionKey)}</option>`).join("")}
+            </select>
+          </label>
+          <button class="button button-secondary" type="button" data-print-report="horarios">Imprimir horario</button>
+        </div>
+      </article>
+
+      <article class="table-card">
+        <h3>${escapeHtml(schedule.sectionKey)}</h3>
+        <p class="supporting-copy">${escapeHtml(schedule.room)}</p>
+        <form id="scheduleEditorForm" class="form-stack">
+          <div class="form-grid">
+            <label class="field">
+              <span>Seccion</span>
+              <input name="sectionKey" type="text" value="${escapeHtml(schedule.sectionKey)}">
+            </label>
+            <label class="field">
+              <span>Aula</span>
+              <input name="room" type="text" value="${escapeHtml(schedule.room)}">
+            </label>
+          </div>
+          <input type="hidden" name="rowCount" value="${schedule.rows.length}">
+          <div class="table-wrap input-table">
+            <table>
+              <thead>
+                <tr>
+                  ${schedule.days.map((day) => `<th>${escapeHtml(day)}</th>`).join("")}
+                </tr>
+              </thead>
+              <tbody>
+                ${schedule.rows.map((row, rowIndex) => `
+                  <tr>
+                    ${row.map((cell, cellIndex) => `<td><input name="row-${rowIndex}-${cellIndex}" type="text" value="${escapeHtml(cell)}"></td>`).join("")}
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="button-row">
+            <button class="button button-secondary" type="button" data-add-schedule-row="true">Agregar bloque</button>
+            <button class="button button-primary" type="submit">Guardar horario</button>
+          </div>
+        </form>
+      </article>
+    </div>
+  `;
+};
+
+renderSuppliesSection = function renderSuppliesSectionEnhanced() {
+  const selectedId = state.supplyStudentId || state.selectedStudentId || (state.data.students[0] && state.data.students[0].id);
+  const selectedStudent = getStudentById(selectedId);
+  const selectedSupply = selectedStudent ? getStudentSupply(selectedStudent.id) : null;
+
+  refs.sections.supplies.innerHTML = `
+    ${renderSectionHeader("Control de utiles escolares", "Ahora puedes registrar estado, fecha de entrega y observaciones por alumno.")}
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Actualizar entrega</h3>
+        ${selectedStudent ? `
+          <form id="suppliesForm" class="form-stack">
+            <label class="field">
+              <span>Alumno</span>
+              <select id="supplyStudentSelect" name="studentId">
+                ${state.data.students.map((student) => `<option value="${student.id}" ${student.id === selectedStudent.id ? "selected" : ""}>${escapeHtml(student.fullName)}</option>`).join("")}
+              </select>
+            </label>
+            <div class="form-grid">
+              <label class="field">
+                <span>Estado</span>
+                <select name="status">
+                  ${["Entregado", "Pendiente", "Incompleto"].map((status) => `<option value="${status}" ${selectedSupply.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                </select>
+              </label>
+              <label class="field">
+                <span>Fecha de entrega</span>
+                <input name="deliveredAt" type="date" value="${selectedSupply.deliveredAt || ""}">
+              </label>
+            </div>
+            <label class="field">
+              <span>Utiles entregados</span>
+              <textarea name="delivered" placeholder="Separados por coma">${escapeHtml(selectedSupply.delivered.join(", "))}</textarea>
+            </label>
+            <label class="field">
+              <span>Utiles faltantes</span>
+              <textarea name="missing" placeholder="Separados por coma">${escapeHtml(selectedSupply.missing.join(", "))}</textarea>
+            </label>
+            <label class="field">
+              <span>Observaciones</span>
+              <textarea name="deliveryNotes" placeholder="Detalle de la entrega">${escapeHtml(selectedSupply.deliveryNotes || "")}</textarea>
+            </label>
+            <button class="button button-primary" type="submit">Guardar entrega</button>
+          </form>
+        ` : `<p>No hay alumnos disponibles.</p>`}
+      </article>
+
+      <article class="table-card">
+        <h3>Seguimiento general</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Alumno</th>
+                <th>Estado</th>
+                <th>Fecha</th>
+                <th>Entregado</th>
+                <th>Observaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${state.data.supplies.map((supply) => {
+                const student = getStudentById(supply.studentId);
+                return `
+                  <tr>
+                    <td>${escapeHtml(student ? student.fullName : "Alumno")}</td>
+                    <td>${renderStatusPill(supply.status)}</td>
+                    <td>${formatDate(supply.deliveredAt)}</td>
+                    <td>${escapeHtml(supply.delivered.join(", ") || "Sin items")}</td>
+                    <td>${escapeHtml(supply.deliveryNotes || "Sin observaciones")}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  `;
+};
+renderDocumentsSection = function renderDocumentsSectionEnhanced() {
+  const selectedStudentId = state.documentStudentId || state.selectedStudentId || (state.data.students[0] && state.data.students[0].id);
+  const selectedType = state.documentType || "Constancia de estudios";
+  const student = getStudentById(selectedStudentId);
+  const preview = student ? buildDocumentHtml(student, selectedType) : "<p>Seleccione un alumno.</p>";
+  const recentDocs = [...state.data.documents].slice(-5).reverse();
+  const hasTemplate = Boolean(state.data.school.documentTemplate);
+
+  refs.sections.documents.innerHTML = `
+    ${renderSectionHeader("Constancias y documentos", "Las constancias ahora pueden salir sobre una plantilla de imagen cargada por ti.")}
+
+    <div class="documents-grid">
+      <article class="glass-card">
+        <h3>Generar documento</h3>
+        <div class="detail-grid">
+          <label class="field">
+            <span>Alumno</span>
+            <select id="docStudentSelect">
+              ${state.data.students.map((item) => `<option value="${item.id}" ${item.id === selectedStudentId ? "selected" : ""}>${escapeHtml(item.fullName)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Tipo</span>
+            <select id="docTypeSelect">
+              ${["Constancia de estudios", "Constancia de matricula", "Constancia de pago", "Constancia de no adeudo"].map((type) => `<option value="${type}" ${type === selectedType ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="file-input">
+            <span>Plantilla de imagen</span>
+            <input id="documentTemplateInput" type="file" accept="image/*">
+            <span class="template-note">${hasTemplate ? "Hay una plantilla activa para las constancias." : "Carga tu imagen para usarla como fondo del documento."}</span>
+          </label>
+          <div class="button-row">
+            <button class="button button-primary" type="button" data-print-document="true">Emitir e imprimir</button>
+            <button class="button button-secondary" type="button" data-save-document="true">Registrar emision</button>
+            ${hasTemplate ? '<button class="button button-secondary" type="button" data-clear-document-template="true">Quitar plantilla</button>' : ""}
+          </div>
+        </div>
+        <div class="divider"></div>
+        <h3>Ultimas constancias</h3>
+        <div class="timeline-list">
+          ${recentDocs.map((documentItem) => {
+            const docStudent = getStudentById(documentItem.studentId);
+            return `
+              <div class="timeline-item">
+                <strong>${escapeHtml(documentItem.type)}</strong>
+                <p>${escapeHtml(docStudent ? docStudent.fullName : "Alumno")}</p>
+                <p>${escapeHtml(documentItem.code)} · ${formatDate(documentItem.issuedAt)}</p>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </article>
+
+      <article class="document-sheet">
+        <div class="document-preview">${preview}</div>
+      </article>
+    </div>
+  `;
+};
+
+renderSettingsSection = function renderSettingsSectionEnhanced() {
+  refs.sections.settings.innerHTML = `
+    ${renderSectionHeader("Ajustes", "Configura el nombre del colegio, el nombre de la administradora, el logo corto y el tema visual.")}
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Configuracion general</h3>
+        <form id="settingsForm" class="settings-grid">
+          <label class="field">
+            <span>Nombre del colegio</span>
+            <input name="schoolName" type="text" value="${escapeHtml(state.data.school.name)}" required>
+          </label>
+          <label class="field">
+            <span>Ciudad</span>
+            <input name="city" type="text" value="${escapeHtml(state.data.school.city)}" required>
+          </label>
+          <label class="field">
+            <span>Nombre de la administradora</span>
+            <input name="adminName" type="text" value="${escapeHtml(state.data.school.adminName)}" required>
+          </label>
+          <label class="field">
+            <span>Siglas del logo</span>
+            <input name="logo" type="text" value="${escapeHtml(state.data.school.logo)}" maxlength="4" required>
+          </label>
+          <label class="field field-full">
+            <span>Tema visual</span>
+            <select name="theme" id="themePresetSelect">
+              <option value="roosevelt" ${state.data.school.theme === "roosevelt" ? "selected" : ""}>Roosevelt dorado</option>
+              <option value="oceano" ${state.data.school.theme === "oceano" ? "selected" : ""}>Oceano</option>
+              <option value="bosque" ${state.data.school.theme === "bosque" ? "selected" : ""}>Bosque</option>
+              <option value="terracota" ${state.data.school.theme === "terracota" ? "selected" : ""}>Terracota</option>
+            </select>
+          </label>
+          <div class="field field-full">
+            <button class="button button-primary" type="submit">Guardar ajustes</button>
+          </div>
+        </form>
+      </article>
+
+      <article class="glass-card">
+        <h3>Resumen actual</h3>
+        <div class="badge-grid">
+          <span class="tag">${escapeHtml(state.data.school.name)}</span>
+          <span class="tag">Administradora: ${escapeHtml(state.data.school.adminName)}</span>
+          <span class="tag">Tema: ${escapeHtml(state.data.school.theme)}</span>
+        </div>
+        <div class="divider"></div>
+        <div class="notice-card">
+          <p><strong>Plantilla de constancias:</strong> ${state.data.school.documentTemplate ? "Cargada" : "Sin cargar"}</p>
+          <p>La imagen de fondo para constancias se gestiona desde el modulo de constancias.</p>
+          <div class="button-row">
+            <button class="button button-secondary" type="button" data-open-section="documents">Ir a constancias</button>
+          </div>
+        </div>
+      </article>
+    </div>
+  `;
+};
+
+buildDocumentHtml = function buildDocumentHtmlEnhanced(student, type) {
+  const finance = getStudentFinancialSummary(student.id);
+  const lastPayment = [...getStudentPayments(student.id)].filter((payment) => payment.paid > 0).slice(-1)[0];
+  const issueDate = formatDate(isoDate(0));
+  const templateStyle = state.data.school.documentTemplate ? ` style="background-image:url('${state.data.school.documentTemplate}')"` : "";
+  let body = "";
+
+  if (type === "Constancia de matricula") {
+    body = `Se deja constancia que el estudiante <strong>${escapeHtml(student.fullName)}</strong>, identificado con DNI ${escapeHtml(student.dni)}, se encuentra matriculado en el nivel ${escapeHtml(student.level)}, grado ${escapeHtml(student.grade)} seccion ${escapeHtml(student.section)} del anio lectivo ${escapeHtml(student.year)}.`;
+  } else if (type === "Constancia de pago") {
+    body = lastPayment
+      ? `Se certifica que la familia del estudiante <strong>${escapeHtml(student.fullName)}</strong> registro el pago de <strong>${escapeHtml(lastPayment.concept)}</strong> por ${formatCurrency(lastPayment.paid)} con comprobante ${escapeHtml(lastPayment.receipt)}.`
+      : `No existen pagos registrados para el estudiante <strong>${escapeHtml(student.fullName)}</strong>.`;
+  } else if (type === "Constancia de no adeudo") {
+    body = finance.pending > 0
+      ? `El estudiante <strong>${escapeHtml(student.fullName)}</strong> mantiene un saldo pendiente de ${formatCurrency(finance.pending)}. No corresponde emitir constancia de no adeudo.`
+      : `Se deja constancia que el estudiante <strong>${escapeHtml(student.fullName)}</strong> no mantiene deuda pendiente con la institucion al ${issueDate}.`;
+  } else {
+    body = `Se deja constancia que el estudiante <strong>${escapeHtml(student.fullName)}</strong> cursa estudios en ${escapeHtml(state.data.school.name)} durante el anio lectivo ${escapeHtml(student.year)}.`;
+  }
+
+  return `
+    <div class="document-canvas"${templateStyle}>
+      <div class="document-overlay">
+        <div class="document-header">
+          <div class="document-logo">${escapeHtml(state.data.school.logo)}</div>
+          <div>
+            <p class="eyebrow" style="color:#5a6579;">Institucion educativa privada</p>
+            <h3>${escapeHtml(state.data.school.name)}</h3>
+            <p>${escapeHtml(state.data.school.city)} · ${issueDate}</p>
+          </div>
+        </div>
+        <h4>${escapeHtml(type)}</h4>
+        <p>${body}</p>
+        <p>Codigo interno: ${escapeHtml(nextDocumentCode(type))}</p>
+        <p>Emitido por: ${escapeHtml(getSessionDisplayName())}</p>
+      </div>
+    </div>
+  `;
+};
+
+saveCurrentDocument = function saveCurrentDocumentEnhanced() {
+  const studentId = state.documentStudentId || state.selectedStudentId;
+  const type = state.documentType || "Constancia de estudios";
+  const student = getStudentById(studentId);
+  if (!student) {
+    showToast("Seleccione un alumno antes de registrar la constancia.");
+    return;
+  }
+
+  if (type === "Constancia de no adeudo" && getStudentFinancialSummary(student.id).pending > 0) {
+    showToast("No es posible emitir constancia de no adeudo porque el alumno tiene saldo pendiente.");
+    return;
+  }
+
+  const record = ensureDocumentRecord(student.id, type);
+  recordLog(state.session, `Emision de ${type} para ${student.fullName}`);
+  renderDocumentsSection();
+  renderProfileSection();
+  showToast(`Documento registrado con codigo ${record.code}.`);
+};
+
+printDocument = function printDocumentEnhanced() {
+  const studentId = state.documentStudentId || state.selectedStudentId;
+  const type = state.documentType || "Constancia de estudios";
+  const student = getStudentById(studentId);
+  if (!student) {
+    showToast("Seleccione un alumno para imprimir el documento.");
+    return;
+  }
+
+  if (type === "Constancia de no adeudo" && getStudentFinancialSummary(student.id).pending > 0) {
+    showToast("No es posible imprimir constancia de no adeudo si existe deuda pendiente.");
+    return;
+  }
+
+  ensureDocumentRecord(student.id, type);
+  printHtml(type, buildDocumentHtml(student, type));
+};
+
+printHtml = function printHtmlEnhanced(title, content) {
+  const popup = window.open("", "_blank", "width=980,height=820");
+  if (!popup) {
+    showToast("El navegador bloqueo la ventana emergente de impresion.");
+    return;
+  }
+
+  popup.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          h2, h3, h4 { margin-top: 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+          th { background: #f3f4f6; }
+          p { line-height: 1.6; }
+          .document-canvas { min-height: 1040px; padding: 48px 52px; background-size: cover; background-position: center; background-repeat: no-repeat; position: relative; }
+          .document-canvas::before { content: ""; position: absolute; inset: 0; background: rgba(255,255,255,0.18); }
+          .document-overlay { position: relative; z-index: 1; max-width: 78%; margin: 0 auto; padding-top: 32px; }
+          .document-header { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
+          .document-logo { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: linear-gradient(135deg, #ffb454, #ffe9b9); font-weight: 700; }
+          @page { size: A4 portrait; margin: 12mm; }
+        </style>
+      </head>
+      <body>${content}</body>
+    </html>
+  `);
+  popup.document.close();
+  popup.focus();
+  popup.print();
+};
+function getEnhancedDefaultData() {
+  const base = originalCreateDefaultData();
+  base.school = {
+    ...base.school,
+    name: "Colegio Privado Roosevelt",
+    city: "Lima",
+    logo: "CPR",
+    adminName: "Melanie Castro Jones",
+    theme: "roosevelt",
+    documentTemplate: ""
+  };
+
+  base.staff = base.staff.map((person) => ({
+    ...person,
+    email: String(person.email || "").replace("horizonte.edu", "roosevelt.edu"),
+    phone: person.phone || ""
+  }));
+
+  base.schedules = base.schedules.map((schedule, index) => ({
+    ...schedule,
+    id: schedule.id || `SCH-${String(index + 1).padStart(3, "0")}`
+  }));
+
+  base.supplies = base.supplies.map((supply, index) => ({
+    ...supply,
+    deliveredAt: supply.status === "Entregado" ? isoDate(-16 + index) : "",
+    deliveryNotes: supply.status === "Incompleto" ? "Entrega parcial registrada por almacen." : supply.status === "Entregado" ? "Entrega conforme registrada." : "Pendiente de entrega."
+  }));
+
+  return base;
+}
+
+function hydrateData(sourceData) {
+  const base = getEnhancedDefaultData();
+  const source = sourceData || {};
+  const hydrated = {
+    ...base,
+    ...safeClone(source)
+  };
+
+  hydrated.school = {
+    ...base.school,
+    ...(source.school || {})
+  };
+
+  if (!hydrated.school.name || hydrated.school.name === "Colegio Privado Horizonte") {
+    hydrated.school.name = "Colegio Privado Roosevelt";
+  }
+  if (!hydrated.school.logo || hydrated.school.logo === "SGE") {
+    hydrated.school.logo = "CPR";
+  }
+  if (!hydrated.school.adminName || hydrated.school.adminName === "Karen Salas") {
+    hydrated.school.adminName = "Melanie Castro Jones";
+  }
+  if (!hydrated.school.theme) {
+    hydrated.school.theme = "roosevelt";
+  }
+  if (typeof hydrated.school.documentTemplate !== "string") {
+    hydrated.school.documentTemplate = "";
+  }
+
+  hydrated.staff = Array.isArray(source.staff) && source.staff.length
+    ? source.staff.map((person, index) => ({
+      id: person.id || nextIndexedId(person.role === "Docente" ? "DOC" : "PER", index + 1),
+      name: person.name || "Personal",
+      role: person.role || "Administrativo",
+      area: person.area || "Area general",
+      courses: person.courses || "-",
+      grades: person.grades || "-",
+      schedule: person.schedule || "",
+      tenure: person.tenure || "Ingreso reciente",
+      email: person.email || `personal${index + 1}@roosevelt.edu`,
+      phone: person.phone || ""
+    }))
+    : base.staff;
+
+  hydrated.schedules = Array.isArray(source.schedules) && source.schedules.length
+    ? source.schedules.map((schedule, index) => ({
+      id: schedule.id || `SCH-${String(index + 1).padStart(3, "0")}`,
+      sectionKey: schedule.sectionKey || `Seccion ${index + 1}`,
+      room: schedule.room || "Aula pendiente",
+      days: Array.isArray(schedule.days) && schedule.days.length ? schedule.days : ["Hora", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes"],
+      rows: Array.isArray(schedule.rows) ? schedule.rows.map((row) => normalizeScheduleRow(row)) : [["7:30", "", "", "", "", ""]]
+    }))
+    : base.schedules;
+
+  hydrated.supplies = Array.isArray(source.supplies) && source.supplies.length
+    ? source.supplies.map((supply) => ({
+      studentId: supply.studentId,
+      status: supply.status || "Pendiente",
+      delivered: Array.isArray(supply.delivered) ? supply.delivered : [],
+      missing: Array.isArray(supply.missing) ? supply.missing : [],
+      deliveredAt: supply.deliveredAt || "",
+      deliveryNotes: supply.deliveryNotes || ""
+    }))
+    : base.supplies;
+
+  return hydrated;
+}
+
+function applyThemePreset() {
+  document.body.dataset.theme = state.data?.school?.theme || "roosevelt";
+}
+
+function syncSessionIdentity() {
+  if (!state.session) {
+    return;
+  }
+  state.session.name = getSessionDisplayName();
+  saveToStorage(STORAGE_KEYS.session, state.session);
+}
+
+function getSessionDisplayName() {
+  if (!state.session) {
+    return state.data?.school?.adminName || "Usuario";
+  }
+  if (state.session.username === "admin") {
+    return state.data.school.adminName;
+  }
+  return USERS[state.session.username]?.name || state.session.name || "Usuario";
+}
+
+function persistData() {
+  syncSessionIdentity();
+  applyThemePreset();
+  saveToStorage(STORAGE_KEYS.data, state.data);
+}
+
+function ensureSelectedSchedule() {
+  const schedules = state.data?.schedules || [];
+  const exists = schedules.some((schedule) => schedule.id === state.selectedScheduleId);
+  if (!exists) {
+    state.selectedScheduleId = schedules[0] ? schedules[0].id : null;
+  }
+}
+
+function getSelectedSchedule() {
+  ensureSelectedSchedule();
+  return state.data.schedules.find((schedule) => schedule.id === state.selectedScheduleId) || null;
+}
+
+function nextStaffId(role) {
+  const prefix = role === "Docente" ? "DOC" : "PER";
+  return nextIndexedId(prefix, state.data.staff.length + 1);
+}
+
+function nextScheduleId() {
+  return `SCH-${String(state.data.schedules.length + 1).padStart(3, "0")}`;
+}
+
+function nextIndexedId(prefix, value) {
+  return `${prefix}-${String(value).padStart(3, "0")}`;
+}
+
+function splitList(value) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function safeClone(value) {
+  return JSON.parse(JSON.stringify(value || {}));
+}
+
+function normalizeScheduleRow(row) {
+  if (Array.isArray(row)) {
+    const normalized = row.slice(0, 6);
+    while (normalized.length < 6) {
+      normalized.push("");
+    }
+    return normalized.map((cell) => String(cell || ""));
+  }
+  return ["", "", "", "", "", ""];
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+
+Object.assign(USERS, {
+  cvega: { username: "cvega", password: "docente123", name: "Carlos Vega", role: "Docentes" },
+  atorres: { username: "atorres", password: "docente123", name: "Ana Torres", role: "Docentes" },
+  pmedina: { username: "pmedina", password: "docente123", name: "Paola Medina", role: "Docentes" },
+  ecruz: { username: "ecruz", password: "docente123", name: "Elena Cruz", role: "Docentes" }
+});
+
+const previousHydrateData = hydrateData;
+hydrateData = function hydrateDataExtended(sourceData) {
+  const data = previousHydrateData(sourceData);
+  LEVELS_GRADES.Inicial = ["3 año", "4 año", "5 año"];
+
+  data.capacities = Object.fromEntries(
+    Object.entries(data.capacities || {}).map(([key, value]) => [key.replace(/anos/g, "año"), value])
+  );
+
+  data.students = data.students.map((student) => ({
+    ...student,
+    grade: String(student.grade || "").replace(/anos/g, "año"),
+    submittedDocs: Array.isArray(student.submittedDocs) ? student.submittedDocs : ["DNI", "Partida", "Fotos"]
+  }));
+
+  data.schedules = data.schedules.map((schedule) => ({
+    ...schedule,
+    sectionKey: String(schedule.sectionKey || "").replace(/anos/g, "año"),
+    level: schedule.level || inferScheduleLevel(schedule.sectionKey),
+    rows: ensureBreakByLevel(schedule.level || inferScheduleLevel(schedule.sectionKey), schedule.rows)
+  }));
+
+  ensureUniformPayments(data);
+  return data;
+};
+
+const previousRenderApp = renderApp;
+renderApp = function renderAppWithTeacherData() {
+  state.data = hydrateData(state.data);
+  previousRenderApp();
+};
+
+exportReport = function exportReportAsExcel(reportId) {
+  const report = buildReportDataset(reportId);
+  const workbook = buildExcelWorkbook(report.title, report.headers, report.rows);
+  const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${report.fileName}.xls`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast(`Reporte ${report.title} exportado en formato Excel.`);
+};
+
+function buildExcelWorkbook(title, headers, rows) {
+  const tableRows = rows
+    .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
+    .join("");
+  return `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #9ca3af; padding: 8px; }
+          th { background: #1f2a44; color: #ffffff; font-weight: bold; }
+          .title { font-size: 18px; font-weight: bold; background: #c4b5fd; color: #111827; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr><th class="title" colspan="${headers.length}">${escapeHtml(title)}</th></tr>
+          <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+          ${tableRows}
+        </table>
+      </body>
+    </html>
+  `;
+}
+
+function ensureUniformPayments(data) {
+  data.students.forEach((student) => {
+    const hasTracksuit = data.payments.some((payment) => payment.studentId === student.id && payment.concept === "Buso institucional");
+    const hasUniform = data.payments.some((payment) => payment.studentId === student.id && payment.concept === "Uniforme institucional");
+    if (!hasTracksuit) {
+      data.payments.push({
+        id: `PAY-U-${student.id}-1`,
+        studentId: student.id,
+        concept: "Buso institucional",
+        dueDate: isoDate(20),
+        amount: 120,
+        paid: 0,
+        status: "Pendiente",
+        receipt: "-",
+        date: "-",
+        documentType: "Boleta"
+      });
+    }
+    if (!hasUniform) {
+      data.payments.push({
+        id: `PAY-U-${student.id}-2`,
+        studentId: student.id,
+        concept: "Uniforme institucional",
+        dueDate: isoDate(25),
+        amount: 140,
+        paid: 0,
+        status: "Pendiente",
+        receipt: "-",
+        date: "-",
+        documentType: "Boleta"
+      });
+    }
+  });
+}
+
+function inferScheduleLevel(sectionKey) {
+  const text = normalizeText(sectionKey);
+  if (text.includes("secundaria")) {
+    return "Secundaria";
+  }
+  if (text.includes("primaria")) {
+    return "Primaria";
+  }
+  return "Primaria";
+}
+
+function buildScheduleTemplate(level) {
+  if (level === "Secundaria") {
+    return [
+      ["7:20", "", "", "", "", ""],
+      ["8:10", "", "", "", "", ""],
+      ["9:00", "", "", "", "", ""],
+      ["9:50", "", "", "", "", ""],
+      ["11:00", "RECREO", "RECREO", "RECREO", "RECREO", "RECREO"],
+      ["11:20", "", "", "", "", ""],
+      ["12:10", "", "", "", "", ""],
+      ["13:00", "", "", "", "", ""],
+      ["13:50", "SALIDA 14:00", "SALIDA 14:00", "SALIDA 14:00", "SALIDA 14:00", "SALIDA 14:00"]
+    ];
+  }
+
+  return [
+    ["7:20", "", "", "", "", ""],
+    ["8:10", "", "", "", "", ""],
+    ["9:00", "", "", "", "", ""],
+    ["10:00", "RECREO", "RECREO", "RECREO", "RECREO", "RECREO"],
+    ["10:20", "", "", "", "", ""],
+    ["11:10", "", "", "", "", ""],
+    ["12:00", "", "", "", "", ""],
+    ["12:50", "SALIDA 13:15", "SALIDA 13:15", "SALIDA 13:15", "SALIDA 13:15", "SALIDA 13:15"]
+  ];
+}
+
+function ensureBreakByLevel(level, rows) {
+  const baseRows = Array.isArray(rows) && rows.length ? rows.map((row) => normalizeScheduleRow(row)) : buildScheduleTemplate(level);
+  const hasBreak = baseRows.some((row) => normalizeText(row[1]).includes("recreo"));
+  if (hasBreak) {
+    return baseRows;
+  }
+  return buildScheduleTemplate(level);
+}
+
+function getTeacherSections(teacherName) {
+  return state.data.courses.filter((course) => course.teacher === teacherName).map((course) => course.section);
+}
+
+function getStudentsForTeacher(teacherName) {
+  const sections = new Set(getTeacherSections(teacherName));
+  return state.data.students.filter((student) => sections.has(`${student.grade} ${student.section}`) || sections.has(`${student.level} ${student.grade} ${student.section}`));
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const credentialsList = document.querySelector(".credentials");
+  if (credentialsList) {
+    credentialsList.innerHTML = `
+      <li><strong>admin</strong> / <code>admin123</code> · Melanie Castro Jones</li>
+      <li><strong>direccion</strong> / <code>direccion123</code></li>
+      <li><strong>cvega</strong> / <code>docente123</code></li>
+      <li><strong>atorres</strong> / <code>docente123</code></li>
+      <li><strong>pmedina</strong> / <code>docente123</code></li>
+    `;
+  }
+});
+const previousEnhancedHandleDynamicSubmit = handleDynamicSubmit;
+handleDynamicSubmit = function handleDynamicSubmitTeacherAndSchedule(event) {
+  if (event.target.id === "gradeForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const studentId = String(formData.get("studentId") || "");
+    const course = String(formData.get("course") || "");
+    const period = String(formData.get("period") || "Bimestre 1");
+    const score = Number(formData.get("score") || 0);
+    const teacher = state.session.role === "Docentes" ? getSessionDisplayName() : String(formData.get("teacher") || "");
+    const existing = state.data.grades.find((grade) => grade.studentId === studentId && grade.course === course && grade.period === period);
+    if (existing) {
+      existing.score = score;
+      existing.teacher = teacher;
+    } else {
+      state.data.grades.push({ studentId, course, teacher, period, score });
+    }
+    persistData();
+    recordLog(state.session, `Registro de nota ${course} para ${getStudentById(studentId)?.fullName || studentId}`);
+    renderAcademicSection();
+    renderProfileSection();
+    showToast("Nota guardada correctamente.");
+    return;
+  }
+
+  if (event.target.id === "scheduleCreateForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const level = String(formData.get("level") || "Primaria");
+    const sectionKey = String(formData.get("sectionKey") || "").trim();
+    const schedule = {
+      id: nextScheduleId(),
+      level,
+      sectionKey,
+      room: String(formData.get("room") || "").trim(),
+      days: ["Hora", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes"],
+      rows: buildScheduleTemplate(level)
+    };
+    state.data.schedules.push(schedule);
+    state.selectedScheduleId = schedule.id;
+    persistData();
+    recordLog(state.session, `Registro de horario ${schedule.sectionKey}`);
+    renderScheduleSection();
+    showToast("Horario creado con la estructura del nivel seleccionado.");
+    return;
+  }
+
+  if (event.target.id === "studentForm") {
+    previousEnhancedHandleDynamicSubmit(event);
+    const student = getStudentById(state.selectedStudentId);
+    if (student) {
+      ensureUniformPayments(state.data);
+      persistData();
+      renderFinanceSection();
+      renderProfileSection();
+    }
+    return;
+  }
+
+  previousEnhancedHandleDynamicSubmit(event);
+};
+
+renderAcademicSection = function renderAcademicSectionEnhanced() {
+  const teacherView = state.session.role === "Docentes";
+  const teacherName = getSessionDisplayName();
+  const visibleCourses = teacherView ? state.data.courses.filter((course) => course.teacher === teacherName) : state.data.courses;
+  const visibleStudents = teacherView ? getStudentsForTeacher(teacherName) : state.data.students;
+  const visibleGrades = teacherView ? state.data.grades.filter((grade) => grade.teacher === teacherName) : state.data.grades;
+  const teacherSections = teacherView ? getTeacherSections(teacherName) : [];
+
+  refs.sections.academic.innerHTML = `
+    ${renderSectionHeader("Gestion academica", teacherView ? "Portal docente para ver aulas, registrar notas y exportarlas en Excel." : "Registro de cursos, docentes, calificaciones, promedios y visualizacion por alumno y curso.", `
+      <div class="button-row">
+        <button class="button button-soft" type="button" data-export-report="academico">Exportar Excel</button>
+      </div>
+    `)}
+
+    <div class="inline-metrics">
+      ${teacherView ? `<span class="tag">Docente: ${escapeHtml(teacherName)}</span><span class="tag">Aulas: ${escapeHtml(teacherSections.join(", ") || "Sin asignacion")}</span>` : `<span class="tag">${state.data.courses.length} cursos registrados</span>`}
+      <span class="tag">${visibleStudents.length} alumnos visibles</span>
+      <span class="tag">${visibleGrades.length} notas registradas</span>
+    </div>
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>${teacherView ? "Registrar notas" : "Registro manual de notas"}</h3>
+        <form id="gradeForm" class="form-stack">
+          <label class="field">
+            <span>Alumno</span>
+            <select name="studentId">
+              ${visibleStudents.map((student) => `<option value="${student.id}">${escapeHtml(student.fullName)} · ${escapeHtml(`${student.level} ${student.grade} ${student.section}`)}</option>`).join("")}
+            </select>
+          </label>
+          <div class="form-grid">
+            <label class="field">
+              <span>Curso</span>
+              <select name="course">
+                ${visibleCourses.map((course) => `<option value="${course.course}">${escapeHtml(course.course)} · ${escapeHtml(course.section)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="field">
+              <span>Periodo</span>
+              <select name="period">
+                <option value="Bimestre 1">Bimestre 1</option>
+                <option value="Bimestre 2">Bimestre 2</option>
+                <option value="Bimestre 3">Bimestre 3</option>
+                <option value="Bimestre 4">Bimestre 4</option>
+              </select>
+            </label>
+          </div>
+          ${teacherView ? `<input type="hidden" name="teacher" value="${escapeHtml(teacherName)}">` : `
+            <label class="field">
+              <span>Docente</span>
+              <select name="teacher">
+                ${state.data.staff.filter((person) => person.role === "Docente").map((person) => `<option value="${person.name}">${escapeHtml(person.name)}</option>`).join("")}
+              </select>
+            </label>
+          `}
+          <label class="field">
+            <span>Nota</span>
+            <input name="score" type="number" min="0" max="20" required>
+          </label>
+          <button class="button button-primary" type="submit">Guardar nota</button>
+        </form>
+      </article>
+
+      <article class="table-card">
+        <h3>${teacherView ? "Aulas y alumnos asignados" : "Resumen academico"}</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Alumno</th>
+                <th>Aula</th>
+                <th>Promedio</th>
+                <th>Pagos de uniforme</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${visibleStudents.map((student) => {
+                const uniformPayments = getStudentPayments(student.id).filter((payment) => payment.concept.includes("Uniforme") || payment.concept.includes("Buso"));
+                return `
+                  <tr>
+                    <td>${escapeHtml(student.fullName)}</td>
+                    <td>${escapeHtml(`${student.level} ${student.grade} ${student.section}`)}</td>
+                    <td>${getStudentAverage(student.id).toFixed(1)}</td>
+                    <td>${escapeHtml(uniformPayments.map((payment) => `${payment.concept}: ${payment.status}`).join(" · ") || "Sin registros")}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+
+    <article class="table-card">
+      <h3>${teacherView ? "Notas del docente" : "Registro de calificaciones"}</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Alumno</th>
+              <th>Curso</th>
+              <th>Docente</th>
+              <th>Periodo</th>
+              <th>Nota</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visibleGrades.map((grade) => {
+              const student = getStudentById(grade.studentId);
+              return `
+                <tr>
+                  <td>${escapeHtml(student ? student.fullName : "Alumno")}</td>
+                  <td>${escapeHtml(grade.course)}</td>
+                  <td>${escapeHtml(grade.teacher)}</td>
+                  <td>${escapeHtml(grade.period)}</td>
+                  <td>${grade.score}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `;
+};
+
+renderPlanningSection = function renderPlanningSectionEnhanced() {
+  refs.sections.planning.innerHTML = `
+    ${renderSectionHeader("Seguimiento docente", "Vista completa del docente con estado de planificacion, correo, horario y especialidad.")}
+
+    <div class="grid-two">
+      ${state.data.planning.map((item) => {
+        const staff = state.data.staff.find((person) => person.name === item.teacher);
+        return `
+          <article class="glass-card">
+            <div class="chip-row">
+              <span class="tag">${escapeHtml(item.area)}</span>
+              ${renderStatusPill(item.status)}
+            </div>
+            <h3>${escapeHtml(item.teacher)}</h3>
+            <p><strong>Correo:</strong> ${escapeHtml(staff?.email || "Sin correo")}</p>
+            <p><strong>Horario:</strong> ${escapeHtml(staff?.schedule || "Sin horario")}</p>
+            <p><strong>Cumplimiento:</strong> ${formatPercent(item.compliance)}</p>
+            <p><strong>Ultima entrega:</strong> ${formatDate(item.deliveredAt)}</p>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+};
+
+renderSecuritySection = function renderSecuritySectionEnhanced() {
+  const recentLogs = [...state.logs].slice(-8).reverse();
+  const teacherAccounts = Object.values(USERS).filter((user) => user.role === "Docentes" || user.role === "Administrador" || user.role === "Direccion");
+
+  refs.sections.security.innerHTML = `
+    ${renderSectionHeader("Seguridad y accesos", "Aqui puedes revisar accesos recientes y las credenciales de ingreso disponibles para administracion y docentes.")}
+
+    <div class="split-panel">
+      <article class="table-card">
+        <h3>Credenciales de acceso</h3>
+        <div class="notice-card">
+          <p>Para que cualquier persona entre solo mediante enlace, este proyecto debe publicarse en un hosting o servidor web. La aplicacion ya esta preparada como sitio estatico, pero desde aqui no puedo desplegarla a internet sin acceso al hosting.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Contrasena</th>
+                <th>Nombre</th>
+                <th>Rol</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${teacherAccounts.map((user) => `
+                <tr>
+                  <td>${escapeHtml(user.username)}</td>
+                  <td>${escapeHtml(user.password)}</td>
+                  <td>${escapeHtml(user.username === "admin" ? state.data.school.adminName : user.name)}</td>
+                  <td>${escapeHtml(user.role)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="table-card">
+        <h3>Bitacora de accesos</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Usuario</th>
+                <th>Rol</th>
+                <th>Accion</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recentLogs.map((logItem) => `
+                <tr>
+                  <td>${formatDate(logItem.timestamp.slice(0, 10))}</td>
+                  <td>${escapeHtml(logItem.name)}<br><small>${escapeHtml(logItem.user)}</small></td>
+                  <td>${escapeHtml(logItem.role)}</td>
+                  <td>${escapeHtml(logItem.action)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  `;
+};
+
+renderScheduleSection = function renderScheduleSectionByLevel() {
+  ensureSelectedSchedule();
+  const schedule = getSelectedSchedule();
+  if (!schedule) {
+    refs.sections.schedule.innerHTML = `<article class="empty-card"><h3>Sin horarios</h3><p>Registra el primer horario para empezar a editarlo.</p></article>`;
+    return;
+  }
+  const scheduleStudents = state.data.students.filter((student) => normalizeText(schedule.sectionKey).includes(normalizeText(student.grade)) && normalizeText(schedule.sectionKey).includes(normalizeText(student.section)));
+
+  refs.sections.schedule.innerHTML = `
+    ${renderSectionHeader("Horarios escolares", "Horarios editables por nivel con recreo automatico para primaria a las 10:00 y secundaria a las 11:00.")}
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Crear horario</h3>
+        <form id="scheduleCreateForm" class="form-grid">
+          <label class="field">
+            <span>Nivel</span>
+            <select name="level">
+              <option value="Primaria">Primaria</option>
+              <option value="Secundaria">Secundaria</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Seccion</span>
+            <input name="sectionKey" type="text" placeholder="Primaria 5° A" required>
+          </label>
+          <label class="field field-full">
+            <span>Aula</span>
+            <input name="room" type="text" placeholder="Aula 205" required>
+          </label>
+          <div class="field field-full">
+            <button class="button button-primary" type="submit">Crear horario</button>
+          </div>
+        </form>
+
+        <div class="divider"></div>
+        <label class="field">
+          <span>Horario activo</span>
+          <select id="scheduleSelect">
+            ${state.data.schedules.map((item) => `<option value="${item.id}" ${item.id === schedule.id ? "selected" : ""}>${escapeHtml(`${item.level} · ${item.sectionKey}`)}</option>`).join("")}
+          </select>
+        </label>
+        <p class="template-note">${schedule.level === "Secundaria" ? "Secundaria: 7:20 a 14:00, recreo 11:00" : "Primaria: 7:20 a 13:15, recreo 10:00"}</p>
+      </article>
+
+      <article class="table-card">
+        <h3>${escapeHtml(schedule.sectionKey)}</h3>
+        <p class="supporting-copy">${escapeHtml(schedule.level)} · ${escapeHtml(schedule.room)}</p>
+        <form id="scheduleEditorForm" class="form-stack">
+          <div class="form-grid">
+            <label class="field">
+              <span>Seccion</span>
+              <input name="sectionKey" type="text" value="${escapeHtml(schedule.sectionKey)}">
+            </label>
+            <label class="field">
+              <span>Aula</span>
+              <input name="room" type="text" value="${escapeHtml(schedule.room)}">
+            </label>
+          </div>
+          <input type="hidden" name="rowCount" value="${schedule.rows.length}">
+          <div class="table-wrap input-table">
+            <table>
+              <thead>
+                <tr>
+                  ${schedule.days.map((day) => `<th>${escapeHtml(day)}</th>`).join("")}
+                </tr>
+              </thead>
+              <tbody>
+                ${schedule.rows.map((row, rowIndex) => `
+                  <tr>
+                    ${row.map((cell, cellIndex) => `<td><input name="row-${rowIndex}-${cellIndex}" type="text" value="${escapeHtml(cell)}"></td>`).join("")}
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="button-row">
+            <button class="button button-secondary" type="button" data-add-schedule-row="true">Agregar bloque</button>
+            <button class="button button-primary" type="submit">Guardar horario</button>
+          </div>
+        </form>
+      </article>
+    </div>
+
+    <article class="table-card">
+      <h3>Alumnos por aula</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Alumno</th>
+              <th>Nivel</th>
+              <th>Grado</th>
+              <th>Seccion</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${scheduleStudents.map((student) => `
+              <tr>
+                <td>${escapeHtml(student.fullName)}</td>
+                <td>${escapeHtml(student.level)}</td>
+                <td>${escapeHtml(student.grade)}</td>
+                <td>${escapeHtml(student.section)}</td>
+              </tr>
+            `).join("") || '<tr><td colspan="4">No hay alumnos asignados a esta aula todavia.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `;
+};
+const previousHydrateDataExtended = hydrateData;
+hydrateData = function hydrateDataNormalized(sourceData) {
+  const data = previousHydrateDataExtended(sourceData);
+  data.courses = data.courses.map((course) => ({
+    ...course,
+    section: String(course.section || "").replace(/anos/g, "año")
+  }));
+  return data;
+};
+
+getTeacherSections = function getTeacherSectionsNormalized(teacherName) {
+  return state.data.courses
+    .filter((course) => course.teacher === teacherName)
+    .map((course) => normalizeText(course.section));
+};
+
+getStudentsForTeacher = function getStudentsForTeacherNormalized(teacherName) {
+  const sections = new Set(getTeacherSections(teacherName));
+  return state.data.students.filter((student) => {
+    const shortKey = normalizeText(`${student.grade} ${student.section}`);
+    const fullKey = normalizeText(`${student.level} ${student.grade} ${student.section}`);
+    return sections.has(shortKey) || sections.has(fullKey);
+  });
+};

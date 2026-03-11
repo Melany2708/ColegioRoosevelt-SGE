@@ -1,0 +1,143 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Gestion Educativa</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-backdrop" aria-hidden="true"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <section id="loginView" class="login-view">
+    <div class="hero-panel">
+      <div class="hero-brand">
+        <div class="brand-mark">CPR</div>
+        <div>
+          <p class="eyebrow">Gestion integral escolar</p>
+          <h1>Sistema web para procesos academicos, administrativos y financieros</h1>
+        </div>
+      </div>
+
+      <p class="hero-copy">
+        Base inicial lista para una institucion educativa privada: matriculas, perfil del alumno,
+        control academico, pagos, documentos, reportes y tablero administrativo con modulos independientes por pestaña.
+      </p>
+
+      <div class="hero-grid">
+        <article class="hero-card">
+          <h2>Modulos cubiertos</h2>
+          <ul>
+            <li>Login con roles y bitacora de accesos</li>
+            <li>Matricula y admision con control de vacantes</li>
+            <li>Perfil integral del alumno</li>
+            <li>Academico, planificacion, horarios y personal</li>
+            <li>Finanzas, contabilidad, utiles, actividades y reportes</li>
+          </ul>
+        </article>
+
+        <article class="hero-card">
+          <h2>Credenciales demo</h2>
+          <ul class="credentials">
+            <li><strong>admin</strong> / <code>admin123</code> · Melanie Castro Jones</li>
+            <li><strong>direccion</strong> / <code>direccion123</code></li>
+            <li><strong>docente</strong> / <code>docente123</code></li>
+            <li><strong>tesoreria</strong> / <code>tesoreria123</code></li>
+          </ul>
+        </article>
+      </div>
+    </div>
+
+    <form id="loginForm" class="login-card">
+      <div class="section-heading">
+        <p class="eyebrow">Acceso seguro</p>
+        <h2>Iniciar sesion</h2>
+      </div>
+
+      <label class="field">
+        <span>Usuario</span>
+        <input id="usernameInput" name="username" type="text" autocomplete="username" placeholder="Ingrese su usuario" required>
+      </label>
+
+      <label class="field">
+        <span>Contrasena</span>
+        <input id="passwordInput" name="password" type="password" autocomplete="current-password" placeholder="Ingrese su contrasena" required>
+      </label>
+
+      <button type="submit" class="button button-primary button-block">Ingresar al sistema</button>
+      <button type="button" id="recoverPasswordBtn" class="button button-secondary button-block">Recuperar contrasena</button>
+
+      <p class="helper-text">
+        La sesion activa queda registrada en la bitacora interna del sistema.
+      </p>
+    </form>
+  </section>
+
+  <div id="appShell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <div class="brand-mark brand-mark-small">CPR</div>
+        <div>
+          <p class="eyebrow">Institucion privada</p>
+          <h2 id="schoolName">Colegio Privado Roosevelt</h2>
+        </div>
+      </div>
+
+      <div class="sidebar-summary">
+        <p id="sidebarRole" class="role-badge">Administrador</p>
+        <p id="sidebarUser" class="sidebar-user">Usuario</p>
+      </div>
+
+      <nav id="navMenu" class="nav-menu" aria-label="Modulos del sistema"></nav>
+
+      <div class="sidebar-foot">
+        <p>Acceso web, responsive y listo para evolucionar a produccion.</p>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Panel centralizado</p>
+          <h1>Gestion educativa integral</h1>
+          <p id="topbarDate" class="topbar-date"></p>
+        </div>
+
+        <div class="topbar-actions">
+          <label class="search-box">
+            <span>Buscar alumno</span>
+            <input id="globalSearch" type="search" placeholder="Nombre, DNI o codigo">
+          </label>
+          <button id="printPageBtn" type="button" class="button button-secondary">Imprimir vista</button>
+          <button id="logoutBtn" type="button" class="button button-primary">Cerrar sesion</button>
+        </div>
+      </header>
+
+      <section id="dashboardSection" class="content-section" data-section="dashboard"></section>
+      <section id="admissionsSection" class="content-section" data-section="admissions"></section>
+      <section id="profileSection" class="content-section" data-section="profile"></section>
+      <section id="academicSection" class="content-section" data-section="academic"></section>
+      <section id="planningSection" class="content-section" data-section="planning"></section>
+      <section id="staffSection" class="content-section" data-section="staff"></section>
+      <section id="scheduleSection" class="content-section" data-section="schedule"></section>
+      <section id="financeSection" class="content-section" data-section="finance"></section>
+      <section id="accountingSection" class="content-section" data-section="accounting"></section>
+      <section id="suppliesSection" class="content-section" data-section="supplies"></section>
+      <section id="activitiesSection" class="content-section" data-section="activities"></section>
+      <section id="reportsSection" class="content-section" data-section="reports"></section>
+      <section id="documentsSection" class="content-section" data-section="documents"></section>
+      <section id="securitySection" class="content-section" data-section="security"></section>
+      <section id="settingsSection" class="content-section" data-section="settings"></section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script src="enhancements.js"></script>
+</body>
+</html>
+
+
+
+
+
