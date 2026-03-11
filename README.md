@@ -1,29 +1,32 @@
 ﻿# Sistema de Gestion Educativa
 
-Base inicial de un sistema web de gestion educativa construida como prototipo funcional en HTML, CSS y JavaScript puro.
+Aplicacion web de gestion educativa para Colegio Privado Roosevelt. La base ahora incluye frontend, backend para Netlify Functions, autenticacion segura, base de datos centralizada y sesiones del lado servidor.
 
 ## Incluye en esta version
-- Login con usuarios demo y control visual por roles.
-- Dashboard con indicadores clave.
-- Matriculas y admision con validacion de vacantes.
-- Perfil integral del alumno.
-- Modulos de academico, planificacion, personal, horarios, finanzas, contabilidad, utiles, actividades, reportes y constancias.
+- Login web con backend real cuando Netlify Functions esta activo.
+- Sesiones con cookie `HttpOnly` y validacion del lado servidor.
+- Base de datos centralizada en Postgres compatible.
+- Sincronizacion del estado del sistema hacia la base central.
+- Dashboard, matriculas, alumno, academico, planificacion, personal, horarios, pagos, contabilidad, utiles, actividades, reportes y constancias.
 - Exportacion de reportes a Excel en formato `.xls` con tabla estructurada.
 - Impresion de documentos y comprobantes desde el navegador.
-- Persistencia local en `localStorage` para conservar la sesion y los registros demo.
+- Migracion automatica de datos previos desde `localStorage` al primer ingreso del administrador.
 
-## Como usar
-1. Abrir [index.html](C:/Users/CodexSandboxOffline/.codex/.sandbox/cwd/1bfb381396278886/index.html) en un navegador.
-2. Ingresar con una credencial demo:
-   - `admin` / `admin123`
-   - `direccion` / `direccion123`
-   - `docente` / `docente123`
-   - `tesoreria` / `tesoreria123`
-3. Navegar por los modulos desde el menu lateral.
+## Archivos principales
+- Frontend: [index.html](C:/Users/DELL/Documents/Sistema de Gestión Escolar/index.html), [styles.css](C:/Users/DELL/Documents/Sistema de Gestión Escolar/styles.css), [app.js](C:/Users/DELL/Documents/Sistema de Gestión Escolar/app.js), [enhancements.js](C:/Users/DELL/Documents/Sistema de Gestión Escolar/enhancements.js), [backend.js](C:/Users/DELL/Documents/Sistema de Gestión Escolar/backend.js)
+- Netlify: [netlify.toml](C:/Users/DELL/Documents/Sistema de Gestión Escolar/netlify.toml)
+- API serverless: [netlify/functions](C:/Users/DELL/Documents/Sistema de Gestión Escolar/netlify/functions)
+- Esquema SQL: [db/schema.sql](C:/Users/DELL/Documents/Sistema de Gestión Escolar/db/schema.sql)
+- Semilla de usuarios: [seed/users.sample.json](C:/Users/DELL/Documents/Sistema de Gestión Escolar/seed/users.sample.json)
 
-## Alcance actual
-Esta base resuelve la experiencia funcional inicial en frontend. Para una implementacion productiva aun faltan backend, API, autenticacion real, base de datos, hosting, respaldo y seguridad del lado servidor.
+## Puesta en marcha
+1. Ejecuta [db/schema.sql](C:/Users/DELL/Documents/Sistema de Gestión Escolar/db/schema.sql) en tu base Postgres.
+2. Configura `DATABASE_URL` en Netlify.
+3. Instala dependencias con `npm install`.
+4. Crea usuarios iniciales con `npm run seed:users`.
+5. Vuelve a desplegar el sitio.
 
-## Siguiente fase sugerida
-Revisar [docs/arquitectura.md](C:/Users/CodexSandboxOffline/.codex/.sandbox/cwd/1bfb381396278886/docs/arquitectura.md) para convertir este prototipo en una aplicacion web completa.
-
+## Documentacion
+- Arquitectura general: [docs/arquitectura.md](C:/Users/DELL/Documents/Sistema de Gestión Escolar/docs/arquitectura.md)
+- Publicacion por enlace: [docs/publicacion.md](C:/Users/DELL/Documents/Sistema de Gestión Escolar/docs/publicacion.md)
+- Backend productivo: [docs/backend-netlify.md](C:/Users/DELL/Documents/Sistema de Gestión Escolar/docs/backend-netlify.md)

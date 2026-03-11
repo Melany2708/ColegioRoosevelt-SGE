@@ -1645,3 +1645,595 @@ getStudentsForTeacher = function getStudentsForTeacherNormalized(teacherName) {
     return sections.has(shortKey) || sections.has(fullKey);
   });
 };
+const previousUltimateHandleDynamicClick = handleDynamicClick;
+handleDynamicClick = function handleDynamicClickCrud(event) {
+  const deleteStudentButton = event.target.closest("[data-delete-student]");
+  if (deleteStudentButton) {
+    const studentId = deleteStudentButton.dataset.deleteStudent;
+    const student = getStudentById(studentId);
+    if (!student) {
+      showToast("El alumno ya no existe en la base actual.");
+      return;
+    }
+    const confirmed = window.confirm(`Se eliminara al alumno ${student.fullName} con sus pagos, utiles, notas y documentos. Deseas continuar?`);
+    if (!confirmed) {
+      return;
+    }
+    deleteStudentCascade(studentId);
+    recordLog(state.session, `Eliminacion de alumno ${student.fullName}`);
+    renderApp();
+    navigateTo("admissions", false);
+    showToast("Alumno eliminado correctamente.");
+    return;
+  }
+
+  const deleteStaffButton = event.target.closest("[data-delete-staff]");
+  if (deleteStaffButton) {
+    const staffId = deleteStaffButton.dataset.deleteStaff;
+    const staff = state.data.staff.find((person) => person.id === staffId);
+    if (!staff) {
+      showToast("El personal seleccionado ya no existe.");
+      return;
+    }
+    const confirmed = window.confirm(`Se eliminara a ${staff.name} del registro de personal. Deseas continuar?`);
+    if (!confirmed) {
+      return;
+    }
+    deleteStaffCascade(staffId);
+    recordLog(state.session, `Eliminacion de personal ${staff.name}`);
+    renderApp();
+    navigateTo("staff", false);
+    showToast("Personal eliminado correctamente.");
+    return;
+  }
+
+  previousUltimateHandleDynamicClick(event);
+};
+
+const previousUltimateHandleDynamicSubmit = handleDynamicSubmit;
+handleDynamicSubmit = function handleDynamicSubmitPayments(event) {
+  if (event.target.id === "paymentForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const studentId = String(formData.get("studentId") || "");
+    const conceptPreset = String(formData.get("conceptPreset") || "");
+    const customConcept = String(formData.get("customConcept") || "").trim();
+    const concept = conceptPreset === "Otro" ? customConcept : conceptPreset;
+    const amount = Number(formData.get("amount") || 0);
+    const paid = Number(formData.get("paid") || 0);
+    const dueDate = String(formData.get("dueDate") || "");
+    const paymentDate = String(formData.get("paymentDate") || "-");
+    const documentType = String(formData.get("documentType") || "Boleta");
+    const receipt = String(formData.get("receipt") || "-").trim() || "-";
+
+    if (!studentId || !concept || amount <= 0 || !dueDate) {
+      showToast("Completa alumno, concepto, monto y fecha de vencimiento para registrar el pago.");
+      return;
+    }
+
+    const status = paid <= 0 ? "Pendiente" : paid >= amount ? "Pagado" : "Parcial";
+    const payment = {
+      id: nextPaymentId(),
+      studentId,
+      concept,
+      dueDate,
+      amount,
+      paid,
+      status,
+      receipt: paid > 0 ? receipt : "-",
+      date: paid > 0 && paymentDate ? paymentDate : "-",
+      documentType
+    };
+
+    state.data.payments.push(payment);
+    persistData();
+    recordLog(state.session, `Registro de pago ${concept} para ${getStudentById(studentId)?.fullName || studentId}`);
+    renderFinanceSection();
+    renderProfileSection();
+    showToast("Pago registrado correctamente.");
+    return;
+  }
+
+  previousUltimateHandleDynamicSubmit(event);
+};
+
+renderAdmissionsSection = function renderAdmissionsSectionEnhancedCrud() {
+  const filteredStudents = getFilteredStudents();
+  const vacancy = getVacancy("Primaria", "5°", "A");
+  const newStudents = state.data.students.filter((student) => student.admissionType === "Nuevo").length;
+  const transferStudents = state.data.students.filter((student) => student.admissionType === "Trasladado").length;
+
+  refs.sections.admissions.innerHTML = `
+    ${renderSectionHeader("Matricula y admision", "Registro de alumnos nuevos, trasladados y reingresantes con control de vacantes y eliminacion directa.", `
+      <span class="tag">${filteredStudents.length} registros visibles</span>
+    `)}
+
+    <div class="metric-grid">
+      <article class="mini-card">
+        <h3>Total matriculados</h3>
+        <p class="metric-number">${state.data.students.length}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Alumnos nuevos</h3>
+        <p class="metric-number">${newStudents}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Trasladados</h3>
+        <p class="metric-number">${transferStudents}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Vacantes 5° A</h3>
+        <p class="metric-number">${vacancy.available}</p>
+      </article>
+    </div>
+
+    <div class="grid-two">
+      <article class="glass-card">
+        <h3>Registrar alumno</h3>
+        <form id="studentForm" class="form-grid">
+          <label class="field">
+            <span>Codigo</span>
+            <input id="studentCode" name="code" type="text" value="${escapeHtml(nextStudentCode())}" readonly>
+          </label>
+          <label class="field">
+            <span>Tipo de ingreso</span>
+            <select name="admissionType">
+              <option value="Nuevo">Nuevo</option>
+              <option value="Trasladado">Trasladado</option>
+              <option value="Reingresante">Reingresante</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Nombres</span>
+            <input name="names" type="text" required>
+          </label>
+          <label class="field">
+            <span>Apellidos</span>
+            <input name="lastNames" type="text" required>
+          </label>
+          <label class="field">
+            <span>DNI</span>
+            <input name="dni" type="text" minlength="8" maxlength="8" required>
+          </label>
+          <label class="field">
+            <span>Fecha de nacimiento</span>
+            <input name="birthDate" type="date" required>
+          </label>
+          <label class="field">
+            <span>Sexo</span>
+            <select name="sex">
+              <option value="F">Femenino</option>
+              <option value="M">Masculino</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Año lectivo</span>
+            <input name="year" type="number" value="${state.data.school.academicYear}" required>
+          </label>
+          <label class="field field-full">
+            <span>Direccion</span>
+            <input name="address" type="text" required>
+          </label>
+          <label class="field">
+            <span>Telefono</span>
+            <input name="phone" type="text" required>
+          </label>
+          <label class="field">
+            <span>Correo</span>
+            <input name="email" type="email" required>
+          </label>
+          <label class="field">
+            <span>Nivel</span>
+            <select id="admissionLevel" name="level">
+              <option value="Inicial">Inicial</option>
+              <option value="Primaria" selected>Primaria</option>
+              <option value="Secundaria">Secundaria</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Grado</span>
+            <select id="admissionGrade" name="grade">${buildGradeOptions("Primaria", "5°")}</select>
+          </label>
+          <label class="field">
+            <span>Seccion</span>
+            <select id="admissionSection" name="section">
+              ${SECTIONS.map((section) => `<option value="${section}">${section}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Apoderado</span>
+            <input name="guardianName" type="text" required>
+          </label>
+          <label class="field">
+            <span>Telefono del apoderado</span>
+            <input name="guardianPhone" type="text" required>
+          </label>
+          <label class="field field-full">
+            <span>Observaciones</span>
+            <textarea name="observations" placeholder="Datos administrativos o academicos relevantes"></textarea>
+          </label>
+          <div class="field field-full">
+            <span id="vacancyHint">Vacantes disponibles: ${vacancy.available} de ${vacancy.capacity}</span>
+            <button class="button button-primary" type="submit">Guardar matricula</button>
+          </div>
+        </form>
+      </article>
+
+      <article class="table-card">
+        <h3>Historial de matriculas</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Codigo</th>
+                <th>Alumno</th>
+                <th>Nivel / grado</th>
+                <th>Apoderado</th>
+                <th>Ingreso</th>
+                <th>Año</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredStudents.length ? filteredStudents.map((student) => `
+                <tr>
+                  <td>${escapeHtml(student.code)}</td>
+                  <td>
+                    <strong>${escapeHtml(student.fullName)}</strong><br>
+                    <small>${escapeHtml(student.dni)}</small>
+                  </td>
+                  <td>${escapeHtml(`${student.level} ${student.grade} ${student.section}`)}</td>
+                  <td>${escapeHtml(student.guardianName)}</td>
+                  <td>${escapeHtml(student.admissionType)}</td>
+                  <td>${escapeHtml(student.year)}</td>
+                  <td>
+                    <div class="button-row">
+                      <button class="link-button" type="button" data-select-student="${student.id}">Ver perfil</button>
+                      <button class="link-button" type="button" data-delete-student="${student.id}">Eliminar</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join("") : `
+                <tr>
+                  <td colspan="7">No hay alumnos que coincidan con la busqueda actual.</td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  `;
+};
+
+renderStaffSection = function renderStaffSectionEnhancedCrud() {
+  const totalTeachers = state.data.staff.filter((person) => person.role === "Docente").length;
+  const totalAdministrative = state.data.staff.length - totalTeachers;
+
+  refs.sections.staff.innerHTML = `
+    ${renderSectionHeader("Docentes y personal", "Registro y eliminacion de docentes y personal administrativo.")}
+
+    <div class="inline-metrics">
+      <span class="tag">${totalTeachers} docentes</span>
+      <span class="tag">${totalAdministrative} administrativos</span>
+      <span class="tag">${state.data.staff.length} registros activos</span>
+    </div>
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Registrar personal</h3>
+        <form id="staffForm" class="form-grid">
+          <label class="field">
+            <span>Tipo</span>
+            <select name="role">
+              <option value="Docente">Docente</option>
+              <option value="Administrativo">Administrativo</option>
+              <option value="Secretaria">Secretaria</option>
+              <option value="Tesoreria">Tesoreria</option>
+              <option value="Coordinacion academica">Coordinacion academica</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Nombre completo</span>
+            <input name="name" type="text" required>
+          </label>
+          <label class="field">
+            <span>Area o especialidad</span>
+            <input name="area" type="text" required>
+          </label>
+          <label class="field">
+            <span>Correo</span>
+            <input name="email" type="email" required>
+          </label>
+          <label class="field">
+            <span>Telefono</span>
+            <input name="phone" type="text">
+          </label>
+          <label class="field">
+            <span>Horario asignado</span>
+            <input name="schedule" type="text" placeholder="Lun a Vie 7:30 - 13:30" required>
+          </label>
+          <label class="field">
+            <span>Cursos asignados</span>
+            <input name="courses" type="text" placeholder="Solo si aplica">
+          </label>
+          <label class="field">
+            <span>Grados asignados</span>
+            <input name="grades" type="text" placeholder="Solo si aplica">
+          </label>
+          <label class="field field-full">
+            <span>Historial laboral</span>
+            <input name="tenure" type="text" placeholder="2026 - actual">
+          </label>
+          <div class="field field-full">
+            <button class="button button-primary" type="submit">Registrar personal</button>
+          </div>
+        </form>
+      </article>
+
+      <article class="table-card">
+        <h3>Listado de personal</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th>Area</th>
+                <th>Cursos / grados</th>
+                <th>Horario</th>
+                <th>Accion</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${state.data.staff.map((person) => `
+                <tr>
+                  <td>${escapeHtml(person.id)}</td>
+                  <td>${escapeHtml(person.name)}<br><small>${escapeHtml(person.email)}</small></td>
+                  <td>${escapeHtml(person.role)}</td>
+                  <td>${escapeHtml(person.area)}</td>
+                  <td>${escapeHtml(`${person.courses} · ${person.grades}`)}</td>
+                  <td>${escapeHtml(person.schedule)}</td>
+                  <td><button class="link-button" type="button" data-delete-staff="${person.id}">Eliminar</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  `;
+};
+
+renderFinanceSection = function renderFinanceSectionEnhancedCrud() {
+  const accountRows = state.data.students.map((student) => {
+    const summary = getStudentFinancialSummary(student.id);
+    return { student, summary };
+  });
+
+  refs.sections.finance.innerHTML = `
+    ${renderSectionHeader("Pagos y finanzas", "Registro de matriculas, pensiones, uniformes y nuevos pagos manuales.")}
+
+    <div class="metric-grid">
+      <article class="mini-card">
+        <h3>Total pagado</h3>
+        <p class="metric-number">${formatCurrency(getTotalCollected())}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Total pendiente</h3>
+        <p class="metric-number">${formatCurrency(getPendingAmount())}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Pagos del dia</h3>
+        <p class="metric-number">${formatCurrency(getTodayPaymentsAmount())}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Morosidad</h3>
+        <p class="metric-number">${getOverduePayments().length}</p>
+      </article>
+    </div>
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Registrar nuevo pago</h3>
+        <form id="paymentForm" class="form-stack">
+          <label class="field">
+            <span>Alumno</span>
+            <select name="studentId">
+              ${state.data.students.map((student) => `<option value="${student.id}">${escapeHtml(student.fullName)} · ${escapeHtml(student.code)}</option>`).join("")}
+            </select>
+          </label>
+          <div class="form-grid">
+            <label class="field">
+              <span>Concepto</span>
+              <select name="conceptPreset">
+                <option value="Matricula">Matricula</option>
+                <option value="Pension">Pension</option>
+                <option value="Buso institucional">Buso institucional</option>
+                <option value="Uniforme institucional">Uniforme institucional</option>
+                <option value="Taller">Taller</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Concepto personalizado</span>
+              <input name="customConcept" type="text" placeholder="Usar solo si elegiste Otro">
+            </label>
+          </div>
+          <div class="form-grid">
+            <label class="field">
+              <span>Monto total</span>
+              <input name="amount" type="number" min="0" step="0.01" required>
+            </label>
+            <label class="field">
+              <span>Monto pagado</span>
+              <input name="paid" type="number" min="0" step="0.01" value="0">
+            </label>
+          </div>
+          <div class="form-grid">
+            <label class="field">
+              <span>Vencimiento</span>
+              <input name="dueDate" type="date" required>
+            </label>
+            <label class="field">
+              <span>Fecha de pago</span>
+              <input name="paymentDate" type="date">
+            </label>
+          </div>
+          <div class="form-grid">
+            <label class="field">
+              <span>Comprobante</span>
+              <select name="documentType">
+                <option value="Boleta">Boleta</option>
+                <option value="Factura">Factura</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Numero de comprobante</span>
+              <input name="receipt" type="text" placeholder="B001-0100">
+            </label>
+          </div>
+          <button class="button button-primary" type="submit">Agregar pago</button>
+        </form>
+      </article>
+
+      <article class="table-card">
+        <h3>Estado de cuenta por alumno</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Alumno</th>
+                <th>Total</th>
+                <th>Pagado</th>
+                <th>Pendiente</th>
+                <th>Accion</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${accountRows.map(({ student, summary }) => `
+                <tr>
+                  <td>${escapeHtml(student.fullName)}</td>
+                  <td>${formatCurrency(summary.total)}</td>
+                  <td>${formatCurrency(summary.paid)}</td>
+                  <td>${formatCurrency(summary.pending)}</td>
+                  <td><button class="link-button" type="button" data-select-student="${student.id}">Ver alumno</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+
+    <article class="table-card">
+      <h3>Historial de pagos</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Alumno</th>
+              <th>Concepto</th>
+              <th>Estado</th>
+              <th>Comprobante</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.data.payments.map((payment) => {
+              const student = getStudentById(payment.studentId);
+              return `
+                <tr>
+                  <td>${formatDate(payment.date)}</td>
+                  <td>${escapeHtml(student ? student.fullName : "Alumno")}</td>
+                  <td>${escapeHtml(payment.concept)}<br><small>${formatCurrency(payment.amount)}</small></td>
+                  <td>${renderStatusPill(payment.status)}</td>
+                  <td>
+                    ${escapeHtml(payment.documentType)} ${escapeHtml(payment.receipt)}<br>
+                    ${payment.paid > 0 ? `<button class="link-button" type="button" data-print-receipt="${payment.id}">Imprimir</button>` : "Sin comprobante"}
+                  </td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `;
+};
+
+function deleteStudentCascade(studentId) {
+  state.data.students = state.data.students.filter((student) => student.id !== studentId);
+  state.data.grades = state.data.grades.filter((grade) => grade.studentId !== studentId);
+  state.data.payments = state.data.payments.filter((payment) => payment.studentId !== studentId);
+  state.data.supplies = state.data.supplies.filter((supply) => supply.studentId !== studentId);
+  state.data.documents = state.data.documents.filter((documentItem) => documentItem.studentId !== studentId);
+  if (state.selectedStudentId === studentId) {
+    state.selectedStudentId = state.data.students[0] ? state.data.students[0].id : null;
+  }
+  if (state.documentStudentId === studentId) {
+    state.documentStudentId = state.selectedStudentId;
+  }
+  if (state.supplyStudentId === studentId) {
+    state.supplyStudentId = state.selectedStudentId;
+  }
+  persistData();
+}
+
+function deleteStaffCascade(staffId) {
+  const person = state.data.staff.find((item) => item.id === staffId);
+  if (!person) {
+    return;
+  }
+  state.data.staff = state.data.staff.filter((item) => item.id !== staffId);
+  state.data.planning = state.data.planning.filter((item) => item.teacherId !== staffId && item.teacher !== person.name);
+  state.data.courses = state.data.courses.filter((course) => course.teacher !== person.name);
+  Object.keys(USERS).forEach((username) => {
+    if (USERS[username]?.role === "Docentes" && USERS[username]?.name === person.name) {
+      delete USERS[username];
+    }
+  });
+  persistData();
+}
+nextStudentId = function nextStudentIdRobust() {
+  const max = state.data.students.reduce((currentMax, student) => {
+    const match = String(student.id || "").match(/ALU-(\d+)/);
+    return Math.max(currentMax, match ? Number(match[1]) : 0);
+  }, 0);
+  return `ALU-${String(max + 1).padStart(3, "0")}`;
+};
+
+nextStudentCode = function nextStudentCodeRobust() {
+  const max = state.data.students.reduce((currentMax, student) => {
+    const parts = String(student.code || "").split("-");
+    const value = Number(parts[parts.length - 1] || 0);
+    return Math.max(currentMax, value);
+  }, 0);
+  return `${state.data.school.academicYear}-${String(max + 1).padStart(4, "0")}`;
+};
+
+nextPaymentId = function nextPaymentIdRobust() {
+  const max = state.data.payments.reduce((currentMax, payment) => {
+    const match = String(payment.id || "").match(/PAY-(\d+)/);
+    return Math.max(currentMax, match ? Number(match[1]) : 0);
+  }, 0);
+  return `PAY-${String(max + 1).padStart(3, "0")}`;
+};
+
+nextStaffId = function nextStaffIdRobust(role) {
+  const prefix = role === "Docente" ? "DOC" : "PER";
+  const max = state.data.staff.reduce((currentMax, person) => {
+    const match = String(person.id || "").match(new RegExp(`^${prefix}-(\\d+)$`));
+    return Math.max(currentMax, match ? Number(match[1]) : 0);
+  }, 0);
+  return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+};
+
+nextScheduleId = function nextScheduleIdRobust() {
+  const max = state.data.schedules.reduce((currentMax, schedule) => {
+    const match = String(schedule.id || "").match(/SCH-(\d+)/);
+    return Math.max(currentMax, match ? Number(match[1]) : 0);
+  }, 0);
+  return `SCH-${String(max + 1).padStart(3, "0")}`;
+};
