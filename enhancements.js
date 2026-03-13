@@ -485,7 +485,7 @@ ensureValidActiveSection = function ensureValidActiveSectionEnhanced() {
 navigateTo = function navigateToEnhanced(sectionId) {
   const allowed = getAllowedSections();
   if (!allowed.includes(sectionId)) {
-    showToast("Tu rol no tiene acceso a ese modulo.");
+    showToast("Tu rol no tiene acceso a ese modulo.", "error");
     return;
   }
   state.activeSection = sectionId;
@@ -502,7 +502,7 @@ handleLogin = function handleLoginEnhanced(event) {
   const user = USERS[username];
 
   if (!user || user.password !== password) {
-    showToast("Credenciales invalidas. Verifica tu usuario y contrasena institucional.");
+    showToast("Credenciales invalidas. Verifica tu usuario y contrasena institucional.", "error");
     return;
   }
 

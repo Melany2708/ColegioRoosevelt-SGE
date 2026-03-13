@@ -48,7 +48,7 @@ handleLogin = async function handleLoginBackend(event) {
 
   if (!backendRuntime.available) {
     if (isHostedMode()) {
-      showToast("El acceso institucional aun se esta conectando con el servidor. Intenta nuevamente en unos segundos.");
+      showToast("El acceso institucional aun se esta conectando con el servidor. Intenta nuevamente en unos segundos.", "error");
       return;
     }
     localHandleLogin(event);
@@ -56,7 +56,7 @@ handleLogin = async function handleLoginBackend(event) {
   }
 
   if (backendRuntime.setupRequired) {
-    showToast("El backend esta activo, pero aun falta crear los usuarios iniciales desde la base de datos.");
+    showToast("El backend esta activo, pero aun falta crear los usuarios iniciales desde la base de datos.", "error");
     return;
   }
 
@@ -100,7 +100,7 @@ handleLogin = async function handleLoginBackend(event) {
 
     showToast(`Bienvenido(a), ${state.session.name}.`);
   } catch (error) {
-    showToast(error.message || "No se pudo iniciar sesion en el backend.");
+    showToast(error.message || "No se pudo iniciar sesion en el backend.", "error");
   } finally {
     backendRuntime.loginInFlight = false;
     if (submitButton) {

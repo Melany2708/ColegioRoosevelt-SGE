@@ -1643,7 +1643,7 @@ function handleLogin(event) {
   const user = USERS[username];
 
   if (!user || user.password !== password) {
-    showToast("Credenciales invalidas. Verifica tu usuario y contrasena institucional.");
+    showToast("Credenciales invalidas. Verifica tu usuario y contrasena institucional.", "error");
     return;
   }
 
@@ -2095,8 +2095,12 @@ function printHtml(title, content) {
   popup.print();
 }
 
-function showToast(message) {
+function showToast(message, tone = "info") {
   refs.toast.textContent = message;
+  refs.toast.classList.remove("toast-info", "toast-error", "toast-success");
+  refs.toast.classList.add(`toast-${tone}`);
+  refs.toast.setAttribute("role", tone === "error" ? "alert" : "status");
+  refs.toast.setAttribute("aria-live", tone === "error" ? "assertive" : "polite");
   refs.toast.classList.add("is-visible");
   window.clearTimeout(showToast.timerId);
   showToast.timerId = window.setTimeout(() => {
