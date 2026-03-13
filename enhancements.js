@@ -2239,3 +2239,1247 @@ nextScheduleId = function nextScheduleIdRobust() {
   }, 0);
   return `SCH-${String(max + 1).padStart(3, "0")}`;
 };
+
+const TRIMESTER_OPTIONS = ["Trimestre 1", "Trimestre 2", "Trimestre 3"];
+const DEFAULT_ASSESSMENT_TYPES = [
+  "Examen de avance",
+  "Examen trimestral",
+  "Trabajos",
+  "Exposiciones",
+  "Participacion en aula"
+];
+const SIMULATION_TYPES = ["Primer simulacro", "Segundo simulacro", "Tercer simulacro"];
+
+if (!MODULES.some((moduleItem) => moduleItem.id === "direction")) {
+  MODULES.splice(1, 0, { id: "direction", label: "Direccion", hint: "Notas, docentes y simulacros" });
+}
+
+if (!REPORT_DEFINITIONS.some((report) => report.id === "simulacros")) {
+  REPORT_DEFINITIONS.push({
+    id: "simulacros",
+    label: "Reporte de simulacros",
+    description: "Ranking de puntajes por simulacro con puestos, fecha y estudiante."
+  });
+}
+
+ROLE_ACCESS.Administrador = Array.from(new Set([...(ROLE_ACCESS.Administrador || []), "direction"]));
+ROLE_ACCESS.Direccion = Array.from(new Set([...(ROLE_ACCESS.Direccion || []), "direction", "settings"]));
+
+state.academicFilters = state.academicFilters || {
+  assignmentKey: "",
+  trimester: "Trimestre 1",
+  assessmentType: "Examen de avance"
+};
+state.directionFilters = state.directionFilters || {
+  simulationType: "Primer simulacro",
+  position: "Todos",
+  publicSimulationType: "Todas",
+  publicLookupDni: "",
+  publicResults: []
+};
+
+const previousCacheDomDirection = cacheDom;
+cacheDom = function cacheDomDirection() {
+  previousCacheDomDirection();
+  refs.sections.direction = document.getElementById("directionSection");
+  refs.publicSimulationView = document.getElementById("publicSimulacroView");
+  refs.publicSimulationUrlText = document.getElementById("publicSimulationUrlText");
+  refs.publicSimulationResults = document.getElementById("publicSimulationResults");
+};
+
+const previousHydrateDataDirection = hydrateData;
+hydrateData = function hydrateDataDirection(sourceData) {
+  const data = previousHydrateDataDirection(sourceData);
+  ensureAcademicExtensions(data);
+  return data;
+};
+
+const previousRenderSectionsDirection = renderSections;
+renderSections = function renderSectionsDirection() {
+  previousRenderSectionsDirection();
+  renderDirectionSection();
+  renderPublicSimulationView();
+};
+
+const previousRenderAppDirection = renderApp;
+renderApp = function renderAppDirection() {
+  previousRenderAppDirection();
+  syncPublicSimulationRoute();
+};
+
+const previousBuildReportDataset = buildReportDataset;
+buildReportDataset = function buildReportDatasetEnhanced(reportId) {
+  if (reportId === "academico") {
+    const teacherView = state.session?.role === "Docentes";
+    const teacherName = getSessionDisplayName();
+    const rows = getVisibleAcademicRecords(teacherView ? teacherName : "").map((record) => {
+      const student = getStudentById(record.studentId);
+      return [
+        student ? student.fullName : "Alumno",
+        record.sectionKey || (student ? `${student.grade} ${student.section}` : "-"),
+        record.course,
+        record.teacher,
+        record.trimester || normalizeTrimester(record.period),
+        record.assessmentType || "Examen de avance",
+        String(record.score),
+        formatAverageValue(getStudentTrimesterAverage(record.studentId, createAssignmentFromRecord(record), record.trimester || normalizeTrimester(record.period))),
+        formatAverageValue(getStudentFinalAverage(record.studentId, createAssignmentFromRecord(record)))
+      ];
+    });
+    return {
+      title: teacherView ? `Reporte academico del docente ${teacherName}` : "Reporte academico",
+      fileName: teacherView ? `reporte_academico_${slugifyValue(teacherName)}` : "reporte_academico",
+      headers: ["Alumno", "Aula", "Curso", "Docente", "Trimestre", "Tipo de evaluacion", "Nota", "Promedio trimestral", "Promedio final"],
+      rows
+    };
+  }
+
+  if (reportId === "simulacros") {
+    const ranking = getSimulationRanking(state.directionFilters.simulationType, state.directionFilters.position);
+    return {
+      title: `Ranking ${state.directionFilters.simulationType}`,
+      fileName: `simulacro_${slugifyValue(state.directionFilters.simulationType)}`,
+      headers: ["Puesto", "Alumno", "DNI", "Simulacro", "Fecha", "Puntaje"],
+      rows: ranking.map((item) => [
+        String(item.position),
+        item.studentName,
+        item.dni,
+        item.simulationType,
+        item.date,
+        String(item.totalScore)
+      ])
+    };
+  }
+
+  return previousBuildReportDataset(reportId);
+};
+
+const previousGetStudentAverageEnhanced = getStudentAverage;
+getStudentAverage = function getStudentAverageEnhanced(studentId) {
+  const studentGrades = state.data.grades.filter((grade) => grade.studentId === studentId);
+  if (!studentGrades.length) {
+    return previousGetStudentAverageEnhanced(studentId);
+  }
+
+  const assignmentMap = new Map();
+  studentGrades.forEach((grade) => {
+    const assignment = createAssignmentFromRecord(grade);
+    assignmentMap.set(buildAssignmentKey(assignment), assignment);
+  });
+
+  const averages = Array.from(assignmentMap.values())
+    .map((assignment) => getStudentFinalAverage(studentId, assignment))
+    .filter((value) => value > 0);
+
+  if (!averages.length) {
+    return previousGetStudentAverageEnhanced(studentId);
+  }
+
+  return averages.reduce((total, value) => total + value, 0) / averages.length;
+};
+
+function ensureAcademicExtensions(data) {
+  data.gradeTables = normalizeGradeTables(data.gradeTables, data.courses);
+  data.grades = (Array.isArray(data.grades) ? data.grades : []).map((grade, index) => normalizeGradeRecord(grade, data, index));
+  data.simulations = normalizeSimulations(data.simulations, data.students);
+}
+
+function normalizeGradeRecord(grade, data, index) {
+  const record = {
+    id: grade.id || `GRD-${String(index + 1).padStart(4, "0")}`,
+    studentId: String(grade.studentId || ""),
+    course: String(grade.course || ""),
+    teacher: String(grade.teacher || ""),
+    period: normalizeTrimester(grade.period || grade.trimester),
+    trimester: normalizeTrimester(grade.trimester || grade.period),
+    assessmentType: String(grade.assessmentType || DEFAULT_ASSESSMENT_TYPES[0]),
+    sectionKey: String(grade.sectionKey || ""),
+    score: Number(grade.score || 0),
+    recordedAt: String(grade.recordedAt || isoDate(0))
+  };
+
+  if (!record.sectionKey) {
+    record.sectionKey = inferGradeSectionKey(record, data);
+  }
+
+  return record;
+}
+
+function normalizeGradeTables(tables, courses) {
+  const fallbackTables = buildDefaultGradeTables(courses);
+  if (!Array.isArray(tables) || !tables.length) {
+    return fallbackTables;
+  }
+
+  const normalized = tables.map((table, index) => ({
+    id: String(table.id || `GTB-${String(index + 1).padStart(3, "0")}`),
+    teacher: String(table.teacher || ""),
+    course: String(table.course || ""),
+    section: String(table.section || ""),
+    assessmentTypes: Array.isArray(table.assessmentTypes) && table.assessmentTypes.length
+      ? table.assessmentTypes.map((item) => String(item || "").trim()).filter(Boolean)
+      : [...DEFAULT_ASSESSMENT_TYPES],
+    updatedAt: String(table.updatedAt || isoDate(0))
+  }));
+
+  buildDefaultGradeTables(courses).forEach((fallback) => {
+    if (!normalized.some((item) => buildGradeTableKey(item) === buildGradeTableKey(fallback))) {
+      normalized.push(fallback);
+    }
+  });
+
+  return normalized;
+}
+
+function buildDefaultGradeTables(courses) {
+  const unique = new Map();
+  (Array.isArray(courses) ? courses : []).forEach((course, index) => {
+    const table = {
+      id: `GTB-${String(index + 1).padStart(3, "0")}`,
+      teacher: String(course.teacher || ""),
+      course: String(course.course || ""),
+      section: String(course.section || ""),
+      assessmentTypes: [...DEFAULT_ASSESSMENT_TYPES],
+      updatedAt: isoDate(0)
+    };
+    unique.set(buildGradeTableKey(table), table);
+  });
+  return Array.from(unique.values());
+}
+
+function normalizeSimulations(simulations, students) {
+  if (!Array.isArray(simulations) || !simulations.length) {
+    const baseStudents = Array.isArray(students) ? students.slice(0, 4) : [];
+    return baseStudents.map((student, index) => ({
+      id: `SIM-${String(index + 1).padStart(3, "0")}`,
+      simulationType: "Primer simulacro",
+      studentId: student.id,
+      studentName: student.fullName,
+      dni: student.dni,
+      totalScore: 1750 - (index * 80),
+      date: isoDate(-14)
+    }));
+  }
+
+  return simulations.map((item, index) => {
+    const student = Array.isArray(students) ? students.find((entry) => entry.id === item.studentId || entry.dni === item.dni) : null;
+    return {
+      id: String(item.id || `SIM-${String(index + 1).padStart(3, "0")}`),
+      simulationType: normalizeSimulationType(item.simulationType),
+      studentId: String(item.studentId || student?.id || ""),
+      studentName: String(item.studentName || student?.fullName || "Alumno"),
+      dni: String(item.dni || student?.dni || ""),
+      totalScore: Number(item.totalScore || 0),
+      date: String(item.date || isoDate(0))
+    };
+  });
+}
+
+function normalizeTrimester(value) {
+  const text = normalizeText(value || "Trimestre 1");
+  if (text.includes("3")) {
+    return "Trimestre 3";
+  }
+  if (text.includes("2")) {
+    return "Trimestre 2";
+  }
+  return "Trimestre 1";
+}
+
+function normalizeSimulationType(value) {
+  const text = normalizeText(value || "Primer simulacro");
+  if (text.includes("tercer") || text.includes("3")) {
+    return "Tercer simulacro";
+  }
+  if (text.includes("segundo") || text.includes("2")) {
+    return "Segundo simulacro";
+  }
+  return "Primer simulacro";
+}
+
+function buildAssignmentKey(assignment) {
+  return [assignment.teacher, assignment.course, assignment.section].map((item) => normalizeText(item)).join("|");
+}
+
+function buildGradeTableKey(table) {
+  return [table.teacher, table.course, table.section].map((item) => normalizeText(item)).join("|");
+}
+
+function parseAssignmentKey(key) {
+  const assignments = getVisibleAcademicAssignments();
+  return assignments.find((assignment) => buildAssignmentKey(assignment) === String(key || "")) || assignments[0] || null;
+}
+
+function createAssignmentFromRecord(record) {
+  return {
+    teacher: record.teacher,
+    course: record.course,
+    section: record.sectionKey || inferGradeSectionKey(record, state.data)
+  };
+}
+
+function getVisibleAcademicAssignments(teacherName = "") {
+  const source = teacherName
+    ? state.data.courses.filter((course) => normalizeText(course.teacher) === normalizeText(teacherName))
+    : state.data.courses;
+  const unique = new Map();
+  source.forEach((course) => {
+    const assignment = {
+      teacher: course.teacher,
+      course: course.course,
+      section: course.section,
+      level: course.level
+    };
+    unique.set(buildAssignmentKey(assignment), assignment);
+  });
+  return Array.from(unique.values());
+}
+
+function syncAcademicFilterState(assignments = getVisibleAcademicAssignments(state.session?.role === "Docentes" ? getSessionDisplayName() : "")) {
+  if (!assignments.length) {
+    state.academicFilters.assignmentKey = "";
+    return;
+  }
+
+  const exists = assignments.some((assignment) => buildAssignmentKey(assignment) === state.academicFilters.assignmentKey);
+  if (!exists) {
+    state.academicFilters.assignmentKey = buildAssignmentKey(assignments[0]);
+  }
+
+  const currentAssignment = parseAssignmentKey(state.academicFilters.assignmentKey);
+  const assessmentTypes = currentAssignment ? getAssessmentTypesForAssignment(currentAssignment) : [...DEFAULT_ASSESSMENT_TYPES];
+  if (!assessmentTypes.includes(state.academicFilters.assessmentType)) {
+    state.academicFilters.assessmentType = assessmentTypes[0];
+  }
+  state.academicFilters.trimester = normalizeTrimester(state.academicFilters.trimester);
+}
+
+function getAssessmentTypesForAssignment(assignment) {
+  if (!assignment) {
+    return [...DEFAULT_ASSESSMENT_TYPES];
+  }
+  const table = state.data.gradeTables.find((item) => buildGradeTableKey(item) === buildGradeTableKey(assignment));
+  return table?.assessmentTypes?.length ? table.assessmentTypes : [...DEFAULT_ASSESSMENT_TYPES];
+}
+
+function upsertGradeTable(table) {
+  const existing = state.data.gradeTables.find((item) => buildGradeTableKey(item) === buildGradeTableKey(table));
+  if (existing) {
+    existing.assessmentTypes = [...table.assessmentTypes];
+    existing.updatedAt = isoDate(0);
+    return existing;
+  }
+  const created = {
+    id: `GTB-${String(state.data.gradeTables.length + 1).padStart(3, "0")}`,
+    teacher: table.teacher,
+    course: table.course,
+    section: table.section,
+    assessmentTypes: [...table.assessmentTypes],
+    updatedAt: isoDate(0)
+  };
+  state.data.gradeTables.push(created);
+  return created;
+}
+
+function inferGradeSectionKey(grade, data) {
+  const student = data.students.find((item) => item.id === grade.studentId);
+  const directMatch = data.courses.find((course) =>
+    normalizeText(course.course) === normalizeText(grade.course) &&
+    (!grade.teacher || normalizeText(course.teacher) === normalizeText(grade.teacher)) &&
+    student &&
+    normalizeText(course.section) === normalizeText(`${student.grade} ${student.section}`)
+  );
+  if (directMatch) {
+    return directMatch.section;
+  }
+  if (student) {
+    return `${student.grade} ${student.section}`;
+  }
+  return "";
+}
+
+function getStudentsForAssignment(assignment) {
+  if (!assignment) {
+    return [];
+  }
+  return state.data.students.filter((student) => normalizeText(`${student.grade} ${student.section}`) === normalizeText(assignment.section));
+}
+
+function getGradesForAssignment(assignment) {
+  if (!assignment) {
+    return [];
+  }
+  return state.data.grades
+    .filter((grade) =>
+      normalizeText(grade.course) === normalizeText(assignment.course) &&
+      normalizeText(grade.teacher) === normalizeText(assignment.teacher) &&
+      normalizeText(grade.sectionKey || inferGradeSectionKey(grade, state.data)) === normalizeText(assignment.section)
+    )
+    .sort((left, right) => String(right.recordedAt || "").localeCompare(String(left.recordedAt || "")));
+}
+
+function getStudentTrimesterAverage(studentId, assignment, trimester) {
+  const grades = getGradesForAssignment(assignment).filter((grade) => grade.studentId === studentId && normalizeTrimester(grade.trimester || grade.period) === normalizeTrimester(trimester));
+  if (!grades.length) {
+    return 0;
+  }
+  return grades.reduce((total, grade) => total + Number(grade.score || 0), 0) / grades.length;
+}
+
+function getStudentFinalAverage(studentId, assignment) {
+  const trimesterAverages = TRIMESTER_OPTIONS
+    .map((trimester) => getStudentTrimesterAverage(studentId, assignment, trimester))
+    .filter((value) => value > 0);
+  if (!trimesterAverages.length) {
+    return 0;
+  }
+  return trimesterAverages.reduce((total, value) => total + value, 0) / trimesterAverages.length;
+}
+
+function getSchedulesForTeacher(teacherName) {
+  const sections = new Set(getTeacherSections(teacherName));
+  return state.data.schedules.filter((schedule) => {
+    const shortKey = normalizeText(String(schedule.sectionKey || "").replace(/^(primaria|secundaria|inicial)\s+/i, ""));
+    const fullKey = normalizeText(schedule.sectionKey);
+    return sections.has(shortKey) || sections.has(fullKey);
+  });
+}
+
+function getSchedulesForAssignment(assignment) {
+  return state.data.schedules.filter((schedule) =>
+    normalizeText(String(schedule.sectionKey || "").replace(/^(primaria|secundaria|inicial)\s+/i, "")) === normalizeText(assignment.section) ||
+    normalizeText(schedule.sectionKey) === normalizeText(assignment.section)
+  );
+}
+
+function getVisibleAcademicRecords(teacherName = "") {
+  const records = teacherName
+    ? state.data.grades.filter((grade) => normalizeText(grade.teacher) === normalizeText(teacherName))
+    : state.data.grades;
+  return records.map((grade, index) => normalizeGradeRecord(grade, state.data, index));
+}
+
+function getGlobalAcademicSummaryRows() {
+  const assignmentMap = new Map();
+  state.data.grades.forEach((grade) => {
+    const assignment = createAssignmentFromRecord(grade);
+    assignmentMap.set(`${grade.studentId}|${buildAssignmentKey(assignment)}`, { studentId: grade.studentId, assignment });
+  });
+
+  return Array.from(assignmentMap.values()).map((item) => {
+    const student = getStudentById(item.studentId);
+    return {
+      studentName: student?.fullName || "Alumno",
+      course: item.assignment.course,
+      section: item.assignment.section,
+      trimester1: getStudentTrimesterAverage(item.studentId, item.assignment, "Trimestre 1"),
+      trimester2: getStudentTrimesterAverage(item.studentId, item.assignment, "Trimestre 2"),
+      trimester3: getStudentTrimesterAverage(item.studentId, item.assignment, "Trimestre 3"),
+      finalAverage: getStudentFinalAverage(item.studentId, item.assignment)
+    };
+  }).sort((left, right) => left.studentName.localeCompare(right.studentName));
+}
+
+function getSimulationRanking(simulationType, positionFilter = "Todos") {
+  const normalizedSimulation = normalizeSimulationType(simulationType);
+  const ranked = state.data.simulations
+    .filter((item) => normalizeSimulationType(item.simulationType) === normalizedSimulation)
+    .sort((left, right) => Number(right.totalScore || 0) - Number(left.totalScore || 0))
+    .map((item, index) => ({
+      ...item,
+      position: index + 1
+    }));
+
+  if (positionFilter === "Todos") {
+    return ranked;
+  }
+  return ranked.filter((item) => String(item.position) === String(positionFilter));
+}
+
+async function fetchPublicSimulationResults(dni, simulationType) {
+  try {
+    if (typeof backendRuntime !== "undefined" && backendRuntime.available) {
+      const response = await apiFetch(`/simulacros-public?dni=${encodeURIComponent(dni)}&simulationType=${encodeURIComponent(simulationType)}`, { method: "GET" }, true);
+      if (response.ok && Array.isArray(response.results)) {
+        return response.results;
+      }
+    }
+  } catch (error) {
+    // Fall back to local lookup when the endpoint is unavailable.
+  }
+
+  const requestedType = simulationType === "Todas" ? "Todas" : normalizeSimulationType(simulationType);
+  const grouped = SIMULATION_TYPES.flatMap((type) => getSimulationRanking(type).map((item) => ({ ...item, simulationType: type })));
+  return grouped
+    .filter((item) => item.dni === dni && (requestedType === "Todas" || normalizeSimulationType(item.simulationType) === requestedType))
+    .sort((left, right) => String(right.date || "").localeCompare(String(left.date || "")));
+}
+
+function renderScheduleMiniCard(schedule) {
+  return `
+    <div class="schedule-mini-card">
+      <div class="chip-row">
+        <span class="tag">${escapeHtml(schedule.level)}</span>
+        <span class="tag">${escapeHtml(schedule.room)}</span>
+      </div>
+      <h3>${escapeHtml(schedule.sectionKey)}</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>${schedule.days.map((day) => `<th>${escapeHtml(day)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${schedule.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function formatAverageValue(value) {
+  return Number(value || 0) > 0 ? Number(value).toFixed(1) : "-";
+}
+
+function nextGradeId() {
+  const max = state.data.grades.reduce((currentMax, grade) => {
+    const match = String(grade.id || "").match(/GRD-(\d+)/);
+    return Math.max(currentMax, match ? Number(match[1]) : 0);
+  }, 0);
+  return `GRD-${String(max + 1).padStart(4, "0")}`;
+}
+
+function nextSimulationId() {
+  const max = state.data.simulations.reduce((currentMax, item) => {
+    const match = String(item.id || "").match(/SIM-(\d+)/);
+    return Math.max(currentMax, match ? Number(match[1]) : 0);
+  }, 0);
+  return `SIM-${String(max + 1).padStart(3, "0")}`;
+}
+
+function slugifyValue(value) {
+  return normalizeText(value).replace(/\s+/g, "_");
+}
+
+function copyPublicSimulationLink() {
+  const url = getPublicSimulationUrl();
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url).then(() => {
+      showToast("Enlace de consulta publica copiado.");
+    }).catch(() => {
+      window.prompt("Copia este enlace:", url);
+    });
+    return;
+  }
+  window.prompt("Copia este enlace:", url);
+}
+
+function getPublicSimulationUrl() {
+  return `${window.location.origin}${window.location.pathname}#simulacros-consulta`;
+}
+
+function syncPublicSimulationRoute() {
+  const publicMode = window.location.hash === "#simulacros-consulta";
+  if (!refs.publicSimulationView) {
+    return;
+  }
+
+  refs.publicSimulationView.classList.toggle("hidden", !publicMode);
+
+  if (publicMode) {
+    refs.loginView.classList.add("hidden");
+    refs.appShell.classList.add("hidden");
+    renderPublicSimulationView();
+    return;
+  }
+
+  if (state.session) {
+    refs.loginView.classList.add("hidden");
+    refs.appShell.classList.remove("hidden");
+  } else {
+    refs.loginView.classList.remove("hidden");
+    refs.appShell.classList.add("hidden");
+  }
+}
+
+window.addEventListener("hashchange", () => {
+  syncPublicSimulationRoute();
+});
+
+const previousHandleDynamicChangeDirection = handleDynamicChange;
+handleDynamicChange = function handleDynamicChangeDirection(event) {
+  if (event.target.id === "academicAssignmentSelect") {
+    state.academicFilters.assignmentKey = String(event.target.value || "");
+    syncAcademicFilterState();
+    renderAcademicSection();
+    return;
+  }
+
+  if (event.target.id === "academicTrimesterSelect") {
+    state.academicFilters.trimester = normalizeTrimester(event.target.value);
+    renderAcademicSection();
+    return;
+  }
+
+  if (event.target.id === "academicAssessmentSelect") {
+    state.academicFilters.assessmentType = String(event.target.value || DEFAULT_ASSESSMENT_TYPES[0]);
+    renderAcademicSection();
+    return;
+  }
+
+  if (event.target.id === "directionSimulationType") {
+    state.directionFilters.simulationType = normalizeSimulationType(event.target.value);
+    renderDirectionSection();
+    return;
+  }
+
+  if (event.target.id === "directionPositionFilter") {
+    state.directionFilters.position = String(event.target.value || "Todos");
+    renderDirectionSection();
+    return;
+  }
+
+  if (event.target.id === "publicSimulationType") {
+    state.directionFilters.publicSimulationType = String(event.target.value || "Todas");
+    return;
+  }
+
+  previousHandleDynamicChangeDirection(event);
+};
+
+const previousHandleDynamicSubmitDirection = handleDynamicSubmit;
+handleDynamicSubmit = async function handleDynamicSubmitDirection(event) {
+  if (event.target.id === "gradeSchemaForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const assignment = parseAssignmentKey(String(formData.get("assignmentKey") || state.academicFilters.assignmentKey));
+    const assessmentTypes = splitList(String(formData.get("assessmentTypes") || ""))
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!assignment || !assessmentTypes.length) {
+      showToast("Define al menos un tipo de evaluacion para guardar la tabla del curso.");
+      return;
+    }
+
+    upsertGradeTable({
+      teacher: assignment.teacher,
+      course: assignment.course,
+      section: assignment.section,
+      assessmentTypes
+    });
+    state.academicFilters.assessmentType = assessmentTypes[0];
+    persistData();
+    recordLog(state.session, `Actualizacion de tabla de evaluacion ${assignment.course} ${assignment.section}`);
+    renderAcademicSection();
+    showToast("Tabla de evaluacion actualizada correctamente.");
+    return;
+  }
+
+  if (event.target.id === "gradeForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const assignment = parseAssignmentKey(String(formData.get("assignmentKey") || state.academicFilters.assignmentKey));
+    const studentId = String(formData.get("studentId") || "");
+    const trimester = normalizeTrimester(formData.get("trimester"));
+    const assessmentType = String(formData.get("assessmentType") || DEFAULT_ASSESSMENT_TYPES[0]).trim();
+    const score = Number(formData.get("score") || 0);
+
+    if (!assignment || !studentId || !assessmentType || Number.isNaN(score)) {
+      showToast("Completa alumno, curso, trimestre, tipo de evaluacion y nota.");
+      return;
+    }
+
+    const existing = state.data.grades.find((grade) =>
+      grade.studentId === studentId &&
+      normalizeText(grade.course) === normalizeText(assignment.course) &&
+      normalizeText(grade.teacher) === normalizeText(assignment.teacher) &&
+      normalizeText(grade.sectionKey || inferGradeSectionKey(grade, state.data)) === normalizeText(assignment.section) &&
+      normalizeTrimester(grade.trimester || grade.period) === trimester &&
+      normalizeText(grade.assessmentType || "") === normalizeText(assessmentType)
+    );
+
+    const nextRecord = {
+      id: existing?.id || nextGradeId(),
+      studentId,
+      course: assignment.course,
+      teacher: assignment.teacher,
+      sectionKey: assignment.section,
+      trimester,
+      period: trimester,
+      assessmentType,
+      score,
+      recordedAt: isoDate(0)
+    };
+
+    if (existing) {
+      Object.assign(existing, nextRecord);
+    } else {
+      state.data.grades.push(nextRecord);
+    }
+
+    persistData();
+    recordLog(state.session, `Registro de nota ${assignment.course} ${trimester} para ${getStudentById(studentId)?.fullName || studentId}`);
+    renderAcademicSection();
+    renderProfileSection();
+    showToast("Nota guardada correctamente.");
+    return;
+  }
+
+  if (event.target.id === "simulationForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const studentId = String(formData.get("studentId") || "");
+    const simulationType = normalizeSimulationType(formData.get("simulationType"));
+    const date = String(formData.get("date") || isoDate(0));
+    const totalScore = Number(formData.get("totalScore") || 0);
+    const student = getStudentById(studentId);
+
+    if (!student || totalScore < 0) {
+      showToast("Selecciona un alumno valido e ingresa un puntaje correcto.");
+      return;
+    }
+
+    const existing = state.data.simulations.find((item) =>
+      item.studentId === studentId &&
+      normalizeSimulationType(item.simulationType) === simulationType
+    );
+
+    const record = {
+      id: existing?.id || nextSimulationId(),
+      simulationType,
+      studentId,
+      studentName: student.fullName,
+      dni: student.dni,
+      totalScore,
+      date
+    };
+
+    if (existing) {
+      Object.assign(existing, record);
+    } else {
+      state.data.simulations.push(record);
+    }
+
+    state.directionFilters.simulationType = simulationType;
+    persistData();
+    recordLog(state.session, `Registro de ${simulationType.toLowerCase()} para ${student.fullName}`);
+    renderDirectionSection();
+    showToast("Simulacro guardado correctamente.");
+    return;
+  }
+
+  if (event.target.id === "publicSimulationLookupForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const dni = String(formData.get("dni") || "").trim();
+    const simulationType = String(formData.get("simulationType") || "Todas");
+
+    if (!dni) {
+      showToast("Ingresa el DNI del estudiante para realizar la consulta.");
+      return;
+    }
+
+    state.directionFilters.publicLookupDni = dni;
+    state.directionFilters.publicSimulationType = simulationType;
+    state.directionFilters.publicResults = await fetchPublicSimulationResults(dni, simulationType);
+    renderPublicSimulationView();
+    return;
+  }
+
+  await previousHandleDynamicSubmitDirection(event);
+};
+
+const previousHandleDynamicClickDirection = handleDynamicClick;
+handleDynamicClick = function handleDynamicClickDirection(event) {
+  const openPublicButton = event.target.closest("[data-open-public-simulations]");
+  if (openPublicButton) {
+    window.location.hash = "simulacros-consulta";
+    return;
+  }
+
+  const closePublicButton = event.target.closest("[data-close-public-simulations]");
+  if (closePublicButton) {
+    window.location.hash = "";
+    return;
+  }
+
+  const copyPublicLinkButton = event.target.closest("[data-copy-public-simulations-link]");
+  if (copyPublicLinkButton) {
+    copyPublicSimulationLink();
+    return;
+  }
+
+  const deleteSimulationButton = event.target.closest("[data-delete-simulation]");
+  if (deleteSimulationButton) {
+    const simulationId = deleteSimulationButton.dataset.deleteSimulation;
+    const current = state.data.simulations.find((item) => item.id === simulationId);
+    if (!current) {
+      showToast("El registro de simulacro ya no existe.");
+      return;
+    }
+    if (!window.confirm(`Se eliminara ${current.simulationType} de ${current.studentName}. Deseas continuar?`)) {
+      return;
+    }
+    state.data.simulations = state.data.simulations.filter((item) => item.id !== simulationId);
+    persistData();
+    recordLog(state.session, `Eliminacion de ${current.simulationType.toLowerCase()} para ${current.studentName}`);
+    renderDirectionSection();
+    showToast("Registro de simulacro eliminado.");
+    return;
+  }
+
+  previousHandleDynamicClickDirection(event);
+};
+
+renderAcademicSection = function renderAcademicSectionComprehensive() {
+  const teacherView = state.session?.role === "Docentes";
+  const teacherName = getSessionDisplayName();
+  const assignments = getVisibleAcademicAssignments(teacherView ? teacherName : "");
+
+  if (!assignments.length) {
+    refs.sections.academic.innerHTML = `
+      ${renderSectionHeader("Gestion academica", "No hay cursos asignados para mostrar el panel de evaluacion.")}
+      <article class="empty-card"><h3>Sin cursos disponibles</h3><p>Registra cursos y asignaciones para habilitar el modulo academico.</p></article>
+    `;
+    return;
+  }
+
+  syncAcademicFilterState(assignments);
+  const assignment = parseAssignmentKey(state.academicFilters.assignmentKey) || assignments[0];
+  const assignmentStudents = getStudentsForAssignment(assignment);
+  const assessmentTypes = getAssessmentTypesForAssignment(assignment);
+  const filteredGrades = getGradesForAssignment(assignment);
+  const summaryRows = assignmentStudents.map((student) => ({
+    student,
+    trimester1: getStudentTrimesterAverage(student.id, assignment, "Trimestre 1"),
+    trimester2: getStudentTrimesterAverage(student.id, assignment, "Trimestre 2"),
+    trimester3: getStudentTrimesterAverage(student.id, assignment, "Trimestre 3"),
+    finalAverage: getStudentFinalAverage(student.id, assignment)
+  }));
+  const teacherSchedules = teacherView ? getSchedulesForTeacher(teacherName) : getSchedulesForAssignment(assignment);
+
+  refs.sections.academic.innerHTML = `
+    ${renderSectionHeader("Gestion academica", teacherView ? "Portal docente para revisar horarios, alumnos por aula y registrar evaluaciones por trimestre." : "Gestion integral de cursos, tablas de evaluacion, notas por trimestre y promedios finales.", `
+      <div class="button-row">
+        <button class="button button-soft" type="button" data-export-report="academico">Exportar Excel</button>
+      </div>
+    `)}
+
+    <div class="inline-metrics">
+      <span class="tag">Curso activo: ${escapeHtml(assignment.course)}</span>
+      <span class="tag">Aula: ${escapeHtml(assignment.section)}</span>
+      <span class="tag">Docente: ${escapeHtml(assignment.teacher)}</span>
+      <span class="tag">${assignmentStudents.length} alumnos</span>
+    </div>
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Tabla de evaluacion</h3>
+        <form id="gradeSchemaForm" class="form-stack">
+          <label class="field">
+            <span>Curso y aula activos</span>
+            <select id="academicAssignmentSelect" name="assignmentKey">
+              ${assignments.map((item) => `<option value="${escapeHtml(buildAssignmentKey(item))}" ${buildAssignmentKey(item) === buildAssignmentKey(assignment) ? "selected" : ""}>${escapeHtml(`${item.course} · ${item.section} · ${item.teacher}`)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Tipos de evaluacion</span>
+            <textarea name="assessmentTypes" placeholder="Separados por coma">${escapeHtml(assessmentTypes.join(", "))}</textarea>
+          </label>
+          <p class="score-note">Los tipos se usaran para los tres trimestres y podras elegirlos al registrar notas.</p>
+          <button class="button button-secondary" type="submit">Guardar tabla</button>
+        </form>
+      </article>
+
+      <article class="glass-card">
+        <h3>Registrar notas</h3>
+        <form id="gradeForm" class="form-stack">
+          <input type="hidden" name="assignmentKey" value="${escapeHtml(buildAssignmentKey(assignment))}">
+          <label class="field">
+            <span>Alumno</span>
+            <select name="studentId">
+              ${assignmentStudents.map((student) => `<option value="${student.id}">${escapeHtml(student.fullName)} · ${escapeHtml(student.dni)}</option>`).join("")}
+            </select>
+          </label>
+          <div class="form-grid">
+            <label class="field">
+              <span>Trimestre</span>
+              <select id="academicTrimesterSelect" name="trimester">
+                ${TRIMESTER_OPTIONS.map((trimester) => `<option value="${trimester}" ${trimester === state.academicFilters.trimester ? "selected" : ""}>${trimester}</option>`).join("")}
+              </select>
+            </label>
+            <label class="field">
+              <span>Tipo de evaluacion</span>
+              <select id="academicAssessmentSelect" name="assessmentType">
+                ${assessmentTypes.map((item) => `<option value="${escapeHtml(item)}" ${item === state.academicFilters.assessmentType ? "selected" : ""}>${escapeHtml(item)}</option>`).join("")}
+              </select>
+            </label>
+          </div>
+          <label class="field">
+            <span>Nota</span>
+            <input name="score" type="number" min="0" max="20" step="0.1" required>
+          </label>
+          <p class="score-note">El promedio trimestral y el promedio final se calculan automaticamente.</p>
+          <button class="button button-primary" type="submit">Guardar nota</button>
+        </form>
+      </article>
+    </div>
+
+    <div class="split-panel">
+      <article class="table-card">
+        <h3>${teacherView ? "Horarios del docente" : "Horario del aula activa"}</h3>
+        <div class="schedule-card-grid">
+          ${teacherSchedules.map((schedule) => renderScheduleMiniCard(schedule)).join("") || '<div class="lookup-empty-card">No hay horarios vinculados todavia.</div>'}
+        </div>
+      </article>
+
+      <article class="table-card">
+        <h3>Alumnos por aula</h3>
+        <div class="table-summary">
+          <span class="tag">${escapeHtml(assignment.section)}</span>
+          <span class="tag">${escapeHtml(assignment.teacher)}</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Alumno</th>
+                <th>DNI</th>
+                <th>Aula</th>
+                <th>Promedio del curso</th>
+                <th>Uniforme / buso</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${assignmentStudents.map((student) => {
+                const uniformPayments = getStudentPayments(student.id).filter((payment) => payment.concept.includes("Uniforme") || payment.concept.includes("Buso"));
+                return `
+                  <tr>
+                    <td>${escapeHtml(student.fullName)}</td>
+                    <td>${escapeHtml(student.dni)}</td>
+                    <td>${escapeHtml(`${student.level} ${student.grade} ${student.section}`)}</td>
+                    <td>${formatAverageValue(getStudentFinalAverage(student.id, assignment))}</td>
+                    <td>${escapeHtml(uniformPayments.map((payment) => `${payment.concept}: ${payment.status}`).join(" · ") || "Sin registros")}</td>
+                  </tr>
+                `;
+              }).join("") || '<tr><td colspan="5">No hay alumnos asignados a este curso.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+
+    <article class="table-card">
+      <h3>Promedios por trimestre</h3>
+      <p class="table-meta">Tabla consolidada de ${escapeHtml(assignment.course)} para ${escapeHtml(assignment.section)}.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Alumno</th>
+              <th>Trimestre 1</th>
+              <th>Trimestre 2</th>
+              <th>Trimestre 3</th>
+              <th>Promedio final</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${summaryRows.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.student.fullName)}</td>
+                <td>${formatAverageValue(row.trimester1)}</td>
+                <td>${formatAverageValue(row.trimester2)}</td>
+                <td>${formatAverageValue(row.trimester3)}</td>
+                <td><strong>${formatAverageValue(row.finalAverage)}</strong></td>
+              </tr>
+            `).join("") || '<tr><td colspan="5">Todavia no hay notas registradas.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="table-card">
+      <h3>Detalle de evaluaciones</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Alumno</th>
+              <th>Trimestre</th>
+              <th>Tipo</th>
+              <th>Nota</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredGrades.map((grade) => {
+              const student = getStudentById(grade.studentId);
+              return `
+                <tr>
+                  <td>${formatDate(grade.recordedAt || isoDate(0))}</td>
+                  <td>${escapeHtml(student ? student.fullName : "Alumno")}</td>
+                  <td>${escapeHtml(grade.trimester || normalizeTrimester(grade.period))}</td>
+                  <td>${escapeHtml(grade.assessmentType || "Examen de avance")}</td>
+                  <td>${grade.score}</td>
+                </tr>
+              `;
+            }).join("") || '<tr><td colspan="5">Aun no hay evaluaciones registradas para este curso.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `;
+};
+
+function renderDirectionSection() {
+  if (!refs.sections.direction) {
+    return;
+  }
+
+  const simulationType = normalizeSimulationType(state.directionFilters.simulationType);
+  const position = state.directionFilters.position || "Todos";
+  const ranking = getSimulationRanking(simulationType, position);
+  const academicSummary = getGlobalAcademicSummaryRows();
+
+  refs.sections.direction.innerHTML = `
+    ${renderSectionHeader("Panel de direccion", "Supervisa notas, docentes, horarios y administra los simulacros institucionales.", `
+      <div class="button-row">
+        <button class="button button-soft" type="button" data-export-report="simulacros">Exportar ranking</button>
+        <button class="button button-secondary" type="button" data-print-report="simulacros">Imprimir A4</button>
+      </div>
+    `)}
+
+    <div class="metric-grid">
+      <article class="mini-card">
+        <h3>Notas registradas</h3>
+        <p class="metric-number">${state.data.grades.length}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Docentes activos</h3>
+        <p class="metric-number">${state.data.staff.filter((person) => person.role === "Docente").length}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Horarios activos</h3>
+        <p class="metric-number">${state.data.schedules.length}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Simulacros registrados</h3>
+        <p class="metric-number">${state.data.simulations.length}</p>
+      </article>
+    </div>
+
+    <div class="director-grid">
+      <div class="split-panel">
+        <article class="glass-card">
+          <h3>Registrar o actualizar simulacro</h3>
+          <form id="simulationForm" class="form-stack">
+            <div class="form-grid">
+              <label class="field">
+                <span>Simulacro</span>
+                <select name="simulationType">
+                  ${SIMULATION_TYPES.map((item) => `<option value="${item}" ${item === simulationType ? "selected" : ""}>${item}</option>`).join("")}
+                </select>
+              </label>
+              <label class="field">
+                <span>Fecha</span>
+                <input name="date" type="date" value="${isoDate(0)}" required>
+              </label>
+            </div>
+            <label class="field">
+              <span>Alumno</span>
+              <select name="studentId">
+                ${state.data.students.map((student) => `<option value="${student.id}">${escapeHtml(student.fullName)} · ${escapeHtml(student.dni)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="field">
+              <span>Puntaje total</span>
+              <input name="totalScore" type="number" min="0" step="1" required>
+            </label>
+            <p class="score-note">Si el alumno ya tiene un registro en ese simulacro, este formulario lo actualiza.</p>
+            <button class="button button-primary" type="submit">Guardar simulacro</button>
+          </form>
+        </article>
+
+        <article class="table-card">
+          <h3>Acceso para estudiantes</h3>
+          <div class="notice-card">
+            <p>Comparte este enlace para que el alumno consulte por DNI su resultado del simulacro.</p>
+            <p id="directionPublicLinkText" class="supporting-copy">${escapeHtml(getPublicSimulationUrl())}</p>
+            <div class="button-row">
+              <button class="button button-primary" type="button" data-copy-public-simulations-link="true">Copiar enlace</button>
+              <button class="button button-secondary" type="button" data-open-public-simulations="true">Abrir consulta publica</button>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <h3>Filtros del ranking</h3>
+          <div class="compact-form-grid">
+            <label class="field">
+              <span>Simulacro</span>
+              <select id="directionSimulationType">
+                ${SIMULATION_TYPES.map((item) => `<option value="${item}" ${item === simulationType ? "selected" : ""}>${item}</option>`).join("")}
+              </select>
+            </label>
+            <label class="field">
+              <span>Puesto</span>
+              <select id="directionPositionFilter">
+                ${["Todos", "1", "2", "3"].map((item) => `<option value="${item}" ${item === position ? "selected" : ""}>${item === "Todos" ? "Todos" : `Puesto ${item}`}</option>`).join("")}
+              </select>
+            </label>
+          </div>
+        </article>
+      </div>
+
+      <div class="split-panel">
+        <article class="table-card">
+          <h3>Resumen global de notas</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Alumno</th>
+                  <th>Curso</th>
+                  <th>Aula</th>
+                  <th>Trimestre 1</th>
+                  <th>Trimestre 2</th>
+                  <th>Trimestre 3</th>
+                  <th>Final</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${academicSummary.map((row) => `
+                  <tr>
+                    <td>${escapeHtml(row.studentName)}</td>
+                    <td>${escapeHtml(row.course)}</td>
+                    <td>${escapeHtml(row.section)}</td>
+                    <td>${formatAverageValue(row.trimester1)}</td>
+                    <td>${formatAverageValue(row.trimester2)}</td>
+                    <td>${formatAverageValue(row.trimester3)}</td>
+                    <td><strong>${formatAverageValue(row.finalAverage)}</strong></td>
+                  </tr>
+                `).join("") || '<tr><td colspan="7">No hay registros academicos todavia.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="table-card">
+          <h3>Docentes y horarios</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Docente</th>
+                  <th>Area</th>
+                  <th>Cursos</th>
+                  <th>Horario</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.data.staff.filter((person) => person.role === "Docente").map((person) => `
+                  <tr>
+                    <td>${escapeHtml(person.name)}</td>
+                    <td>${escapeHtml(person.area)}</td>
+                    <td>${escapeHtml(person.courses)}</td>
+                    <td>${escapeHtml(person.schedule)}</td>
+                  </tr>
+                `).join("") || '<tr><td colspan="4">No hay docentes registrados.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="divider"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nivel</th>
+                  <th>Seccion</th>
+                  <th>Aula</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.data.schedules.map((schedule) => `
+                  <tr>
+                    <td>${escapeHtml(schedule.level)}</td>
+                    <td>${escapeHtml(schedule.sectionKey)}</td>
+                    <td>${escapeHtml(schedule.room)}</td>
+                  </tr>
+                `).join("") || '<tr><td colspan="3">No hay horarios disponibles.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </div>
+
+      <article class="table-card">
+        <h3>Ranking del simulacro</h3>
+        <p class="table-meta">${escapeHtml(simulationType)}${position !== "Todos" ? ` · filtrado por puesto ${position}` : ""}</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Puesto</th>
+                <th>Alumno</th>
+                <th>DNI</th>
+                <th>Fecha</th>
+                <th>Puntaje</th>
+                <th>Accion</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${ranking.map((item) => `
+                <tr>
+                  <td><span class="rank-badge">${item.position}</span></td>
+                  <td>${escapeHtml(item.studentName)}</td>
+                  <td>${escapeHtml(item.dni)}</td>
+                  <td>${formatDate(item.date)}</td>
+                  <td>${item.totalScore}</td>
+                  <td><button class="link-button" type="button" data-delete-simulation="${item.id}">Eliminar</button></td>
+                </tr>
+              `).join("") || '<tr><td colspan="6">No hay registros para el filtro seleccionado.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  `;
+};
+
+function renderPublicSimulationView() {
+  if (!refs.publicSimulationView || !refs.publicSimulationResults) {
+    return;
+  }
+
+  const results = Array.isArray(state.directionFilters.publicResults) ? state.directionFilters.publicResults : [];
+  const dniValue = state.directionFilters.publicLookupDni || "";
+  const simulationType = state.directionFilters.publicSimulationType || "Todas";
+  if (refs.publicSimulationUrlText) {
+    refs.publicSimulationUrlText.textContent = getPublicSimulationUrl();
+  }
+
+  refs.publicSimulationResults.innerHTML = results.length ? results.map((item) => `
+    <article class="simulation-result-card">
+      <div class="chip-row">
+        <span class="tag">${escapeHtml(item.simulationType)}</span>
+        <span class="rank-badge">${item.position}</span>
+      </div>
+      <h3>${escapeHtml(item.studentName)}</h3>
+      <p>${escapeHtml(item.dni)} · ${formatDate(item.date)}</p>
+      <p class="simulation-score">${item.totalScore}</p>
+      <p class="supporting-copy">Puntaje total obtenido en ${escapeHtml(state.data.school.name)}.</p>
+    </article>
+  `).join("") : `
+    <div class="lookup-empty-card">
+      ${dniValue ? `No se encontraron resultados para el DNI ${escapeHtml(dniValue)}${simulationType !== "Todas" ? ` en ${escapeHtml(simulationType)}` : ""}.` : "Ingresa el DNI del estudiante para consultar su simulacro."}
+    </div>
+  `;
+
+  const input = document.getElementById("publicSimulationDni");
+  if (input) {
+    input.value = dniValue;
+  }
+  const select = document.getElementById("publicSimulationType");
+  if (select) {
+    select.value = simulationType;
+  }
+}

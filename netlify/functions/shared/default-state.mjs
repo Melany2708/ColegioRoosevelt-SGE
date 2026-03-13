@@ -33,6 +33,14 @@ function inferScheduleLevel(schedule) {
   return "Primaria";
 }
 
+const DEFAULT_ASSESSMENT_TYPES = [
+  "Examen de avance",
+  "Examen trimestral",
+  "Trabajos",
+  "Exposiciones",
+  "Participacion en aula"
+];
+
 export function createDefaultAppState() {
   const year = new Date().getFullYear();
   const today = isoDate(0);
@@ -261,7 +269,9 @@ export function createDefaultAppState() {
       { id: "DOCS-001", studentId: "ALU-001", type: "Constancia de estudios", issuedAt: lastWeek, code: `CE-${year}-0001` },
       { id: "DOCS-002", studentId: "ALU-002", type: "Constancia de matricula", issuedAt: today, code: `CM-${year}-0001` },
       { id: "DOCS-003", studentId: "ALU-004", type: "Constancia de pago", issuedAt: today, code: `CP-${year}-0001` }
-    ]
+    ],
+    gradeTables: [],
+    simulations: []
   };
 }
 
@@ -312,8 +322,13 @@ export function normalizeAppState(source) {
     studentId: String(grade.studentId || ""),
     course: String(grade.course || ""),
     teacher: String(grade.teacher || ""),
-    period: String(grade.period || "Bimestre 1"),
-    score: Number(grade.score || 0)
+    period: String(grade.period || grade.trimester || "Trimestre 1"),
+    trimester: String(grade.trimester || grade.period || "Trimestre 1"),
+    assessmentType: String(grade.assessmentType || DEFAULT_ASSESSMENT_TYPES[0]),
+    sectionKey: String(grade.sectionKey || ""),
+    score: Number(grade.score || 0),
+    recordedAt: String(grade.recordedAt || isoDate(0)),
+    id: String(grade.id || "")
   })) : defaults.grades;
 
   nextState.staff = Array.isArray(input.staff) ? input.staff.map((person, index) => ({
@@ -391,6 +406,27 @@ export function normalizeAppState(source) {
     issuedAt: String(documentItem.issuedAt || isoDate(0)),
     code: String(documentItem.code || `DOC-${nextState.school.academicYear}-${String(index + 1).padStart(4, "0")}`)
   })) : defaults.documents;
+
+  nextState.gradeTables = Array.isArray(input.gradeTables) ? input.gradeTables.map((table, index) => ({
+    id: String(table.id || `GTB-${String(index + 1).padStart(3, "0")}`),
+    teacher: String(table.teacher || ""),
+    course: String(table.course || ""),
+    section: String(table.section || ""),
+    assessmentTypes: Array.isArray(table.assessmentTypes) && table.assessmentTypes.length
+      ? table.assessmentTypes.map((item) => String(item || ""))
+      : [...DEFAULT_ASSESSMENT_TYPES],
+    updatedAt: String(table.updatedAt || isoDate(0))
+  })) : defaults.gradeTables;
+
+  nextState.simulations = Array.isArray(input.simulations) ? input.simulations.map((item, index) => ({
+    id: String(item.id || `SIM-${String(index + 1).padStart(3, "0")}`),
+    simulationType: String(item.simulationType || "Primer simulacro"),
+    studentId: String(item.studentId || ""),
+    studentName: String(item.studentName || ""),
+    dni: String(item.dni || ""),
+    totalScore: Number(item.totalScore || 0),
+    date: String(item.date || isoDate(0))
+  })) : defaults.simulations;
 
   return nextState;
 }

@@ -1238,3 +1238,122 @@ tbody tr:hover {
   border-style: solid;
   border-color: rgba(194, 140, 224, 0.28);
 }
+
+.public-lookup-view {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.08fr 0.92fr;
+  gap: 2rem;
+  padding: 2rem;
+  align-items: start;
+}
+
+.public-link-card p,
+.public-link-card .supporting-copy {
+  word-break: break-word;
+}
+
+.lookup-result-grid,
+.schedule-card-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.simulation-result-card,
+.schedule-mini-card {
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(4, 44, 75, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 255, 0.94));
+  box-shadow: 0 16px 36px rgba(4, 44, 75, 0.08);
+}
+
+.simulation-score {
+  margin: 0.3rem 0;
+  font-size: 2.25rem;
+  font-weight: 800;
+  font-family: var(--font-display);
+  color: #042c4b;
+}
+
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #e2b715, #f4e4a4);
+  color: #042c4b;
+  font-weight: 800;
+}
+
+.table-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.table-summary .tag {
+  font-size: 0.86rem;
+}
+
+.section-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.compact-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.compact-form-grid .field.field-wide {
+  grid-column: span 2;
+}
+
+.compact-form-grid .field.field-full {
+  grid-column: 1 / -1;
+}
+
+.score-note {
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.table-meta {
+  margin: 0.4rem 0 1rem;
+  color: var(--muted);
+}
+
+.lookup-empty-card {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed rgba(4, 44, 75, 0.18);
+  background: rgba(4, 44, 75, 0.03);
+  color: var(--muted);
+}
+
+.director-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.director-grid .split-panel {
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .public-lookup-view,
+  .compact-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

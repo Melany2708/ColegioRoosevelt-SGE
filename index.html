@@ -46,6 +46,9 @@
             <li><strong>atorres</strong> / <code>docente123</code></li>
             <li><strong>pmedina</strong> / <code>docente123</code></li>
           </ul>
+          <div class="button-row">
+            <button type="button" class="button button-secondary" data-open-public-simulations="true">Consultar simulacro</button>
+          </div>
         </article>
       </div>
     </div>
@@ -73,6 +76,60 @@
         La sesion activa queda registrada en la bitacora centralizada del sistema.
       </p>
     </form>
+  </section>
+
+  <section id="publicSimulacroView" class="public-lookup-view hidden">
+    <article class="hero-panel">
+      <div class="hero-brand">
+        <div class="brand-mark" aria-label="Logo Colegio Privado Roosevelt"></div>
+        <div>
+          <p class="eyebrow">Consulta publica</p>
+          <h1>Resultados de simulacros</h1>
+        </div>
+      </div>
+
+      <p class="hero-copy">
+        Consulta tus resultados de simulacro ingresando el DNI del estudiante. La informacion se mostrara
+        en tiempo real con el nombre del simulacro, la fecha, el puntaje y el puesto obtenido.
+      </p>
+
+      <article class="hero-card public-link-card">
+        <h2>Acceso para estudiantes</h2>
+        <p id="publicSimulationUrlText" class="supporting-copy">Comparte este mismo enlace con el hash de consulta publica.</p>
+        <div class="button-row">
+          <button type="button" class="button button-primary" data-copy-public-simulations-link="true">Copiar enlace</button>
+          <button type="button" class="button button-secondary" data-close-public-simulations="true">Volver al login</button>
+        </div>
+      </article>
+    </article>
+
+    <article class="login-card">
+      <div class="section-heading">
+        <p class="eyebrow">Busqueda por DNI</p>
+        <h2>Consultar simulacro</h2>
+      </div>
+
+      <form id="publicSimulationLookupForm" class="form-stack">
+        <label class="field">
+          <span>DNI del estudiante</span>
+          <input id="publicSimulationDni" name="dni" type="text" minlength="8" maxlength="8" placeholder="Ingrese el DNI" required>
+        </label>
+
+        <label class="field">
+          <span>Simulacro</span>
+          <select id="publicSimulationType" name="simulationType">
+            <option value="Todas">Todos los simulacros</option>
+            <option value="Primer simulacro">Primer simulacro</option>
+            <option value="Segundo simulacro">Segundo simulacro</option>
+            <option value="Tercer simulacro">Tercer simulacro</option>
+          </select>
+        </label>
+
+        <button type="submit" class="button button-primary button-block">Buscar resultado</button>
+      </form>
+
+      <div id="publicSimulationResults" class="lookup-result-grid"></div>
+    </article>
   </section>
 
   <div id="appShell" class="app-shell hidden">
@@ -116,6 +173,7 @@
       </header>
 
       <section id="dashboardSection" class="content-section" data-section="dashboard"></section>
+      <section id="directionSection" class="content-section" data-section="direction"></section>
       <section id="admissionsSection" class="content-section" data-section="admissions"></section>
       <section id="profileSection" class="content-section" data-section="profile"></section>
       <section id="academicSection" class="content-section" data-section="academic"></section>
