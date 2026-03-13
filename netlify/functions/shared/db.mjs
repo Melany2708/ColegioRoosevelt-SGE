@@ -19,9 +19,9 @@ export function getPool() {
     return pool;
   }
 
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL;
   if (!connectionString) {
-    throw new Error("DATABASE_URL is not configured.");
+    throw new Error("DATABASE_URL or NETLIFY_DATABASE_URL is not configured.");
   }
 
   pool = new Pool({
@@ -58,3 +58,4 @@ export async function healthCheck() {
   const result = await query("select 1 as ok");
   return result.rows[0]?.ok === 1;
 }
+
