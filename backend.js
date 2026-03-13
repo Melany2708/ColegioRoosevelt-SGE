@@ -4,6 +4,7 @@ const localHandleLogin = handleLogin;
 const localHandleLogout = handleLogout;
 const localRecordLog = recordLog;
 const localRenderSecuritySection = renderSecuritySection;
+const LOGIN_PREFERENCES_KEY = "sge_login_preferences_v1";
 
 const backendRuntime = {
   available: false,
@@ -46,6 +47,10 @@ handleLogin = async function handleLoginBackend(event) {
   event.preventDefault();
 
   if (!backendRuntime.available) {
+    if (isHostedMode()) {
+      showToast("El acceso institucional aun se esta conectando con el servidor. Intenta nuevamente en unos segundos.");
+      return;
+    }
     localHandleLogin(event);
     return;
   }
@@ -69,10 +74,11 @@ handleLogin = async function handleLoginBackend(event) {
 
   try {
     const formData = new FormData(event.currentTarget);
+    const username = normalizeText(formData.get("username"));
     const response = await apiFetch("/login", {
       method: "POST",
       body: {
-        username: normalizeText(formData.get("username")),
+        username,
         password: String(formData.get("password") || "")
       }
     });
@@ -84,6 +90,12 @@ handleLogin = async function handleLoginBackend(event) {
     await hydrateFromBackend(true);
     if (!state.session) {
       throw new Error("La sesion no pudo inicializarse correctamente.");
+    }
+
+    try {
+      localStorage.setItem(LOGIN_PREFERENCES_KEY, JSON.stringify({ lastUsername: username }));
+    } catch (error) {
+      // Ignore persistence failures for the remembered username.
     }
 
     showToast(`Bienvenido(a), ${state.session.name}.`);
@@ -408,11 +420,9 @@ function renderLoginStatus() {
       `;
     } else {
       credentialsList.innerHTML = `
-        <li><strong>admin</strong> / <code>admin123</code> · Melanie Castro Jones</li>
-        <li><strong>direccion</strong> / <code>direccion123</code></li>
-        <li><strong>cvega</strong> / <code>docente123</code></li>
-        <li><strong>atorres</strong> / <code>docente123</code></li>
-        <li><strong>pmedina</strong> / <code>docente123</code></li>
+        <li>Verificando acceso institucional...</li>
+        <li>Ingresa con tu usuario y contrasena asignados.</li>
+        <li>El acceso se muestra con informacion institucional.</li>
       `;
     }
   }
@@ -420,7 +430,7 @@ function renderLoginStatus() {
   if (helperText) {
     helperText.textContent = backendRuntime.available
       ? "La sesion activa se valida desde el servidor y se registra en la bitacora centralizada."
-      : "Modo local temporal: la sesion queda registrada solo en este navegador.";
+      : "El ultimo usuario usado queda recordado en este navegador; la contrasena no se guarda en texto plano.";
   }
 }
 

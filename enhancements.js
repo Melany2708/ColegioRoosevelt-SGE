@@ -4,7 +4,8 @@ const originalCacheDom = cacheDom;
 const originalHandleDynamicSubmit = handleDynamicSubmit;
 const originalHandleDynamicChange = handleDynamicChange;
 const originalHandleDynamicClick = handleDynamicClick;
-const SCHOOL_LOGO_IMAGE = "assets/logo-roosevelt.svg";
+const SCHOOL_LOGO_IMAGE = "/assets/logo-roosevelt.svg";
+const LOGIN_PREFERENCES_KEY = "sge_login_preferences_v1";
 
 if (!MODULES.some((moduleItem) => moduleItem.id === "settings")) {
   MODULES.push({ id: "settings", label: "Ajustes", hint: "Tema y colegio" });
@@ -23,6 +24,36 @@ state.documentStudentId = state.documentStudentId || null;
 state.documentType = state.documentType || "Constancia de estudios";
 state.selectedScheduleId = state.selectedScheduleId || null;
 state.supplyStudentId = state.supplyStudentId || null;
+
+function getSavedLoginPreferences() {
+  try {
+    return JSON.parse(localStorage.getItem(LOGIN_PREFERENCES_KEY) || "{}");
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveLoginUsername(username) {
+  const current = getSavedLoginPreferences();
+  localStorage.setItem(LOGIN_PREFERENCES_KEY, JSON.stringify({
+    ...current,
+    lastUsername: String(username || "").trim()
+  }));
+}
+
+function restoreLoginUsername() {
+  const usernameInput = document.getElementById("usernameInput");
+  if (!usernameInput) {
+    return;
+  }
+  const saved = getSavedLoginPreferences();
+  if (saved.lastUsername) {
+    usernameInput.value = saved.lastUsername;
+  }
+}
+
+window.sgeSaveLoginUsername = saveLoginUsername;
+window.sgeRestoreLoginUsername = restoreLoginUsername;
 
 createDefaultData = function createEnhancedDefaultData() {
   return getEnhancedDefaultData();
@@ -46,6 +77,7 @@ renderApp = function renderAppEnhanced() {
     refs.loginView.classList.remove("hidden");
     refs.appShell.classList.add("hidden");
     refs.loginForm.reset();
+    restoreLoginUsername();
     return;
   }
 
@@ -150,7 +182,7 @@ handleLogin = function handleLoginEnhanced(event) {
   const user = USERS[username];
 
   if (!user || user.password !== password) {
-    showToast("Credenciales invalidas. Usa uno de los usuarios demo visibles en login.");
+    showToast("Credenciales invalidas. Verifica tu usuario y contrasena institucional.");
     return;
   }
 
@@ -162,6 +194,7 @@ handleLogin = function handleLoginEnhanced(event) {
     startedAt: new Date().toISOString()
   };
   state.activeSection = (ROLE_ACCESS[user.role] && ROLE_ACCESS[user.role][0]) || "dashboard";
+  saveLoginUsername(user.username);
   saveToStorage(STORAGE_KEYS.session, state.session);
   recordLog({ ...user, name: displayName }, "Inicio de sesion");
   renderApp();
@@ -1052,10 +1085,10 @@ function readFileAsDataUrl(file) {
 
 
 Object.assign(USERS, {
-  cvega: { username: "cvega", password: "docente123", name: "Carlos Vega", role: "Docentes" },
-  atorres: { username: "atorres", password: "docente123", name: "Ana Torres", role: "Docentes" },
-  pmedina: { username: "pmedina", password: "docente123", name: "Paola Medina", role: "Docentes" },
-  ecruz: { username: "ecruz", password: "docente123", name: "Elena Cruz", role: "Docentes" }
+  cvega: { username: "cvega", password: "gestion-servidor", name: "Carlos Vega", role: "Docentes" },
+  atorres: { username: "atorres", password: "gestion-servidor", name: "Ana Torres", role: "Docentes" },
+  pmedina: { username: "pmedina", password: "gestion-servidor", name: "Paola Medina", role: "Docentes" },
+  ecruz: { username: "ecruz", password: "gestion-servidor", name: "Elena Cruz", role: "Docentes" }
 });
 
 const previousHydrateData = hydrateData;
@@ -1220,14 +1253,12 @@ function getStudentsForTeacher(teacherName) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  restoreLoginUsername();
   const credentialsList = document.querySelector(".credentials");
   if (credentialsList) {
     credentialsList.innerHTML = `
-      <li><strong>admin</strong> / <code>admin123</code> · Melanie Castro Jones</li>
-      <li><strong>direccion</strong> / <code>direccion123</code></li>
-      <li><strong>cvega</strong> / <code>docente123</code></li>
-      <li><strong>atorres</strong> / <code>docente123</code></li>
-      <li><strong>pmedina</strong> / <code>docente123</code></li>
+      <li>Verificando acceso institucional...</li>
+      <li>Ingresa con tus credenciales asignadas por la institucion.</li>
     `;
   }
 });
@@ -2254,6 +2285,10 @@ if (!MODULES.some((moduleItem) => moduleItem.id === "direction")) {
   MODULES.splice(1, 0, { id: "direction", label: "Direccion", hint: "Notas, docentes y simulacros" });
 }
 
+if (!MODULES.some((moduleItem) => moduleItem.id === "attendance")) {
+  MODULES.splice(2, 0, { id: "attendance", label: "Asistencias", hint: "Registro diario" });
+}
+
 if (!REPORT_DEFINITIONS.some((report) => report.id === "simulacros")) {
   REPORT_DEFINITIONS.push({
     id: "simulacros",
@@ -2262,8 +2297,19 @@ if (!REPORT_DEFINITIONS.some((report) => report.id === "simulacros")) {
   });
 }
 
+if (!REPORT_DEFINITIONS.some((report) => report.id === "asistencias")) {
+  REPORT_DEFINITIONS.push({
+    id: "asistencias",
+    label: "Reporte de asistencias",
+    description: "Registro diario por alumno con estado presente, tarde, ausente o retirado."
+  });
+}
+
 ROLE_ACCESS.Administrador = Array.from(new Set([...(ROLE_ACCESS.Administrador || []), "direction"]));
-ROLE_ACCESS.Direccion = Array.from(new Set([...(ROLE_ACCESS.Direccion || []), "direction", "settings"]));
+ROLE_ACCESS.Direccion = Array.from(new Set([...(ROLE_ACCESS.Direccion || []), "direction", "attendance", "settings"]));
+ROLE_ACCESS.Secretaria = Array.from(new Set([...(ROLE_ACCESS.Secretaria || []), "attendance", "settings"]));
+ROLE_ACCESS.Administrador = Array.from(new Set([...(ROLE_ACCESS.Administrador || []), "attendance", "direction", "settings"]));
+ROLE_ACCESS.Docentes = ["dashboard", "academic", "planning", "schedule", "activities"];
 
 state.academicFilters = state.academicFilters || {
   assignmentKey: "",
@@ -2275,13 +2321,20 @@ state.directionFilters = state.directionFilters || {
   position: "Todos",
   publicSimulationType: "Todas",
   publicLookupDni: "",
-  publicResults: []
+  publicResults: [],
+  publicTopThree: [],
+  publicResolvedSimulationType: ""
+};
+state.attendanceFilters = state.attendanceFilters || {
+  date: isoDate(0),
+  status: "Todos"
 };
 
 const previousCacheDomDirection = cacheDom;
 cacheDom = function cacheDomDirection() {
   previousCacheDomDirection();
   refs.sections.direction = document.getElementById("directionSection");
+  refs.sections.attendance = document.getElementById("attendanceSection");
   refs.publicSimulationView = document.getElementById("publicSimulacroView");
   refs.publicSimulationUrlText = document.getElementById("publicSimulationUrlText");
   refs.publicSimulationResults = document.getElementById("publicSimulationResults");
@@ -2297,6 +2350,7 @@ hydrateData = function hydrateDataDirection(sourceData) {
 const previousRenderSectionsDirection = renderSections;
 renderSections = function renderSectionsDirection() {
   previousRenderSectionsDirection();
+  renderAttendanceSection();
   renderDirectionSection();
   renderPublicSimulationView();
 };
@@ -2351,6 +2405,26 @@ buildReportDataset = function buildReportDatasetEnhanced(reportId) {
     };
   }
 
+  if (reportId === "asistencias") {
+    const rows = getFilteredAttendanceRows().map((entry) => {
+      const student = getStudentById(entry.studentId);
+      return [
+        entry.date,
+        student ? student.fullName : "Alumno",
+        student ? student.dni : "-",
+        student ? `${student.level} ${student.grade} ${student.section}` : "-",
+        entry.status,
+        entry.notes || "-"
+      ];
+    });
+    return {
+      title: `Reporte de asistencias ${state.attendanceFilters.date}`,
+      fileName: `reporte_asistencias_${state.attendanceFilters.date}`,
+      headers: ["Fecha", "Alumno", "DNI", "Aula", "Estado", "Observaciones"],
+      rows
+    };
+  }
+
   return previousBuildReportDataset(reportId);
 };
 
@@ -2382,6 +2456,7 @@ function ensureAcademicExtensions(data) {
   data.gradeTables = normalizeGradeTables(data.gradeTables, data.courses);
   data.grades = (Array.isArray(data.grades) ? data.grades : []).map((grade, index) => normalizeGradeRecord(grade, data, index));
   data.simulations = normalizeSimulations(data.simulations, data.students);
+  data.attendance = normalizeAttendance(data.attendance, data.students);
 }
 
 function normalizeGradeRecord(grade, data, index) {
@@ -2473,6 +2548,26 @@ function normalizeSimulations(simulations, students) {
       date: String(item.date || isoDate(0))
     };
   });
+}
+
+function normalizeAttendance(attendance, students) {
+  if (!Array.isArray(attendance) || !attendance.length) {
+    return (Array.isArray(students) ? students : []).map((student, index) => ({
+      id: `ATT-${String(index + 1).padStart(4, "0")}`,
+      studentId: student.id,
+      date: isoDate(0),
+      status: index % 4 === 0 ? "Llego tarde" : "Presente",
+      notes: ""
+    }));
+  }
+
+  return attendance.map((item, index) => ({
+    id: String(item.id || `ATT-${String(index + 1).padStart(4, "0")}`),
+    studentId: String(item.studentId || ""),
+    date: String(item.date || isoDate(0)),
+    status: String(item.status || "Presente"),
+    notes: String(item.notes || "")
+  }));
 }
 
 function normalizeTrimester(value) {
@@ -2701,7 +2796,11 @@ async function fetchPublicSimulationResults(dni, simulationType) {
     if (typeof backendRuntime !== "undefined" && backendRuntime.available) {
       const response = await apiFetch(`/simulacros-public?dni=${encodeURIComponent(dni)}&simulationType=${encodeURIComponent(simulationType)}`, { method: "GET" }, true);
       if (response.ok && Array.isArray(response.results)) {
-        return response.results;
+        return {
+          results: response.results,
+          topThree: Array.isArray(response.topThree) ? response.topThree : [],
+          simulationTypeApplied: String(response.simulationTypeApplied || "")
+        };
       }
     }
   } catch (error) {
@@ -2710,9 +2809,17 @@ async function fetchPublicSimulationResults(dni, simulationType) {
 
   const requestedType = simulationType === "Todas" ? "Todas" : normalizeSimulationType(simulationType);
   const grouped = SIMULATION_TYPES.flatMap((type) => getSimulationRanking(type).map((item) => ({ ...item, simulationType: type })));
-  return grouped
+  const results = grouped
     .filter((item) => item.dni === dni && (requestedType === "Todas" || normalizeSimulationType(item.simulationType) === requestedType))
     .sort((left, right) => String(right.date || "").localeCompare(String(left.date || "")));
+  const simulationTypeApplied = requestedType === "Todas"
+    ? (results[0]?.simulationType || "")
+    : requestedType;
+  return {
+    results,
+    topThree: simulationTypeApplied ? getSimulationRanking(simulationTypeApplied).slice(0, 3) : [],
+    simulationTypeApplied
+  };
 }
 
 function renderScheduleMiniCard(schedule) {
@@ -2724,17 +2831,40 @@ function renderScheduleMiniCard(schedule) {
       </div>
       <h3>${escapeHtml(schedule.sectionKey)}</h3>
       <div class="table-wrap">
-        <table>
+        <table class="schedule-grid-table">
           <thead>
             <tr>${schedule.days.map((day) => `<th>${escapeHtml(day)}</th>`).join("")}</tr>
           </thead>
           <tbody>
-            ${schedule.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
+            ${schedule.rows.map((row) => `<tr>${row.map((cell) => renderReadonlyScheduleCell(cell)).join("")}</tr>`).join("")}
           </tbody>
         </table>
       </div>
     </div>
   `;
+}
+
+function scheduleCellClass(cell) {
+  const text = normalizeText(cell);
+  if (!text) {
+    return "schedule-empty";
+  }
+  if (text.includes("recreo")) {
+    return "schedule-break";
+  }
+  if (text.includes("salida")) {
+    return "schedule-dismissal";
+  }
+  const hash = text.split("").reduce((total, char) => total + char.charCodeAt(0), 0);
+  return `schedule-tone-${(hash % 5) + 1}`;
+}
+
+function renderReadonlyScheduleCell(cell) {
+  return `<td class="schedule-cell ${scheduleCellClass(cell)}">${escapeHtml(cell || "-")}</td>`;
+}
+
+function renderEditableScheduleCell(cell, rowIndex, cellIndex) {
+  return `<td class="schedule-cell ${scheduleCellClass(cell)}"><input name="row-${rowIndex}-${cellIndex}" type="text" value="${escapeHtml(cell)}"></td>`;
 }
 
 function formatAverageValue(value) {
@@ -2775,11 +2905,11 @@ function copyPublicSimulationLink() {
 }
 
 function getPublicSimulationUrl() {
-  return `${window.location.origin}${window.location.pathname}#simulacros-consulta`;
+  return `${window.location.origin}/simulacros-consulta`;
 }
 
 function syncPublicSimulationRoute() {
-  const publicMode = window.location.hash === "#simulacros-consulta";
+  const publicMode = window.location.pathname.replace(/\/+$/, "") === "/simulacros-consulta" || window.location.hash === "#simulacros-consulta";
   if (!refs.publicSimulationView) {
     return;
   }
@@ -2802,12 +2932,45 @@ function syncPublicSimulationRoute() {
   }
 }
 
+function openPublicSimulationRoute() {
+  const url = "/simulacros-consulta";
+  if (window.location.pathname !== url) {
+    window.history.pushState({}, "", url);
+  }
+  syncPublicSimulationRoute();
+}
+
+function closePublicSimulationRoute() {
+  if (window.location.pathname !== "/") {
+    window.history.pushState({}, "", "/");
+  } else if (window.location.hash) {
+    window.history.pushState({}, "", "/");
+  }
+  syncPublicSimulationRoute();
+}
+
+window.addEventListener("popstate", () => {
+  syncPublicSimulationRoute();
+});
+
 window.addEventListener("hashchange", () => {
   syncPublicSimulationRoute();
 });
 
 const previousHandleDynamicChangeDirection = handleDynamicChange;
 handleDynamicChange = function handleDynamicChangeDirection(event) {
+  if (event.target.id === "attendanceDateFilter") {
+    state.attendanceFilters.date = String(event.target.value || isoDate(0));
+    renderAttendanceSection();
+    return;
+  }
+
+  if (event.target.id === "attendanceStatusFilter") {
+    state.attendanceFilters.status = String(event.target.value || "Todos");
+    renderAttendanceSection();
+    return;
+  }
+
   if (event.target.id === "academicAssignmentSelect") {
     state.academicFilters.assignmentKey = String(event.target.value || "");
     syncAcademicFilterState();
@@ -2849,6 +3012,42 @@ handleDynamicChange = function handleDynamicChangeDirection(event) {
 
 const previousHandleDynamicSubmitDirection = handleDynamicSubmit;
 handleDynamicSubmit = async function handleDynamicSubmitDirection(event) {
+  if (event.target.id === "attendanceForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const studentId = String(formData.get("studentId") || "");
+    const date = String(formData.get("date") || isoDate(0));
+    const status = String(formData.get("status") || "Presente");
+    const notes = String(formData.get("notes") || "").trim();
+
+    if (!studentId || !date) {
+      showToast("Selecciona alumno y fecha para registrar la asistencia.");
+      return;
+    }
+
+    const existing = state.data.attendance.find((entry) => entry.studentId === studentId && entry.date === date);
+    const nextEntry = {
+      id: existing?.id || nextAttendanceId(),
+      studentId,
+      date,
+      status,
+      notes
+    };
+
+    if (existing) {
+      Object.assign(existing, nextEntry);
+    } else {
+      state.data.attendance.push(nextEntry);
+    }
+
+    state.attendanceFilters.date = date;
+    persistData();
+    recordLog(state.session, `Registro de asistencia ${status.toLowerCase()} para ${getStudentById(studentId)?.fullName || studentId}`);
+    renderAttendanceSection();
+    showToast("Asistencia guardada correctamente.");
+    return;
+  }
+
   if (event.target.id === "gradeSchemaForm") {
     event.preventDefault();
     const formData = new FormData(event.target);
@@ -2982,7 +3181,10 @@ handleDynamicSubmit = async function handleDynamicSubmitDirection(event) {
 
     state.directionFilters.publicLookupDni = dni;
     state.directionFilters.publicSimulationType = simulationType;
-    state.directionFilters.publicResults = await fetchPublicSimulationResults(dni, simulationType);
+    const lookup = await fetchPublicSimulationResults(dni, simulationType);
+    state.directionFilters.publicResults = lookup.results || [];
+    state.directionFilters.publicTopThree = lookup.topThree || [];
+    state.directionFilters.publicResolvedSimulationType = lookup.simulationTypeApplied || "";
     renderPublicSimulationView();
     return;
   }
@@ -2994,13 +3196,13 @@ const previousHandleDynamicClickDirection = handleDynamicClick;
 handleDynamicClick = function handleDynamicClickDirection(event) {
   const openPublicButton = event.target.closest("[data-open-public-simulations]");
   if (openPublicButton) {
-    window.location.hash = "simulacros-consulta";
+    openPublicSimulationRoute();
     return;
   }
 
   const closePublicButton = event.target.closest("[data-close-public-simulations]");
   if (closePublicButton) {
-    window.location.hash = "";
+    closePublicSimulationRoute();
     return;
   }
 
@@ -3148,7 +3350,7 @@ renderAcademicSection = function renderAcademicSectionComprehensive() {
                 <th>DNI</th>
                 <th>Aula</th>
                 <th>Promedio del curso</th>
-                <th>Uniforme / buso</th>
+                ${teacherView ? "" : "<th>Uniforme / buso</th>"}
               </tr>
             </thead>
             <tbody>
@@ -3160,10 +3362,10 @@ renderAcademicSection = function renderAcademicSectionComprehensive() {
                     <td>${escapeHtml(student.dni)}</td>
                     <td>${escapeHtml(`${student.level} ${student.grade} ${student.section}`)}</td>
                     <td>${formatAverageValue(getStudentFinalAverage(student.id, assignment))}</td>
-                    <td>${escapeHtml(uniformPayments.map((payment) => `${payment.concept}: ${payment.status}`).join(" · ") || "Sin registros")}</td>
+                    ${teacherView ? "" : `<td>${escapeHtml(uniformPayments.map((payment) => `${payment.concept}: ${payment.status}`).join(" · ") || "Sin registros")}</td>`}
                   </tr>
                 `;
-              }).join("") || '<tr><td colspan="5">No hay alumnos asignados a este curso.</td></tr>'}
+              }).join("") || `<tr><td colspan="${teacherView ? 4 : 5}">No hay alumnos asignados a este curso.</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -3229,6 +3431,115 @@ renderAcademicSection = function renderAcademicSectionComprehensive() {
         </table>
       </div>
     </article>
+  `;
+};
+
+const previousRenderDashboardSectionRoleAware = renderDashboardSection;
+renderDashboardSection = function renderDashboardSectionRoleAware() {
+  if (state.session?.role !== "Docentes") {
+    previousRenderDashboardSectionRoleAware();
+    return;
+  }
+
+  const teacherName = getSessionDisplayName();
+  const assignments = getVisibleAcademicAssignments(teacherName);
+  const planningItem = state.data.planning.find((item) => normalizeText(item.teacher) === normalizeText(teacherName));
+  const teacherSchedules = getSchedulesForTeacher(teacherName);
+  const upcomingActivities = [...state.data.activities].sort((left, right) => left.date.localeCompare(right.date)).slice(0, 4);
+
+  refs.sections.dashboard.innerHTML = `
+    ${renderSectionHeader("Panel docente", "Vista de trabajo diaria con tus cursos, aulas, horarios y actividades institucionales.", `
+      <div class="button-row">
+        <button class="button button-soft" type="button" data-open-section="academic">Ir a notas</button>
+        <button class="button button-secondary" type="button" data-open-section="schedule">Ver horarios</button>
+      </div>
+    `)}
+
+    <div class="metric-grid">
+      <article class="metric-card">
+        <h3>Cursos asignados</h3>
+        <p class="metric-number">${assignments.length}</p>
+        <p class="supporting-copy">Solo tus cursos habilitados</p>
+        <div class="accent-line"></div>
+      </article>
+      <article class="metric-card">
+        <h3>Aulas asignadas</h3>
+        <p class="metric-number">${new Set(assignments.map((item) => item.section)).size}</p>
+        <p class="supporting-copy">Secciones visibles para tu usuario</p>
+        <div class="accent-line"></div>
+      </article>
+      <article class="metric-card">
+        <h3>Horarios visibles</h3>
+        <p class="metric-number">${teacherSchedules.length}</p>
+        <p class="supporting-copy">Bloques ya asignados por administracion</p>
+        <div class="accent-line"></div>
+      </article>
+      <article class="metric-card">
+        <h3>Planificacion</h3>
+        <p class="metric-number">${planningItem ? formatPercent(planningItem.compliance) : "0%"}</p>
+        <p class="supporting-copy">${planningItem ? planningItem.status : "Sin registro"}</p>
+        <div class="accent-line"></div>
+      </article>
+    </div>
+
+    <div class="grid-two">
+      <article class="glass-card">
+        <h3>Tus cursos y aulas</h3>
+        <div class="timeline-list">
+          ${assignments.map((assignment) => `
+            <div class="timeline-item">
+              <strong>${escapeHtml(assignment.course)}</strong>
+              <p>${escapeHtml(assignment.section)}</p>
+            </div>
+          `).join("") || '<div class="lookup-empty-card">No tienes cursos asignados todavia.</div>'}
+        </div>
+      </article>
+
+      <article class="glass-card">
+        <h3>Actividades institucionales</h3>
+        <div class="activity-list">
+          ${upcomingActivities.map((activity) => `
+            <div class="activity-item">
+              <div class="chip-row">
+                <span class="tag">${formatDate(activity.date)}</span>
+                <span class="tag">${escapeHtml(activity.responsible)}</span>
+              </div>
+              <h4>${escapeHtml(activity.title)}</h4>
+              <p>${escapeHtml(activity.description)}</p>
+            </div>
+          `).join("")}
+        </div>
+      </article>
+    </div>
+  `;
+};
+
+const previousRenderPlanningSectionRoleAware = renderPlanningSection;
+renderPlanningSection = function renderPlanningSectionRoleAware() {
+  if (state.session?.role !== "Docentes") {
+    previousRenderPlanningSectionRoleAware();
+    return;
+  }
+
+  const teacherName = getSessionDisplayName();
+  const item = state.data.planning.find((planning) => normalizeText(planning.teacher) === normalizeText(teacherName));
+  const staff = state.data.staff.find((person) => normalizeText(person.name) === normalizeText(teacherName));
+
+  refs.sections.planning.innerHTML = `
+    ${renderSectionHeader("Mi planificacion", "Seguimiento solo de tu estado de planificacion docente.")}
+    ${item ? `
+      <article class="glass-card">
+        <div class="chip-row">
+          <span class="tag">${escapeHtml(item.area)}</span>
+          ${renderStatusPill(item.status)}
+        </div>
+        <h3>${escapeHtml(item.teacher)}</h3>
+        <p><strong>Correo:</strong> ${escapeHtml(staff?.email || "Sin correo")}</p>
+        <p><strong>Horario:</strong> ${escapeHtml(staff?.schedule || "Sin horario")}</p>
+        <p><strong>Cumplimiento:</strong> ${formatPercent(item.compliance)}</p>
+        <p><strong>Ultima entrega:</strong> ${formatDate(item.deliveredAt)}</p>
+      </article>
+    ` : `<article class="empty-card"><h3>Sin planificacion registrada</h3><p>Aun no hay una planificacion cargada para tu usuario.</p></article>`}
   `;
 };
 
@@ -3451,28 +3762,58 @@ function renderPublicSimulationView() {
   }
 
   const results = Array.isArray(state.directionFilters.publicResults) ? state.directionFilters.publicResults : [];
+  const topThree = Array.isArray(state.directionFilters.publicTopThree) ? state.directionFilters.publicTopThree : [];
+  const resolvedSimulationType = state.directionFilters.publicResolvedSimulationType || "";
   const dniValue = state.directionFilters.publicLookupDni || "";
   const simulationType = state.directionFilters.publicSimulationType || "Todas";
   if (refs.publicSimulationUrlText) {
     refs.publicSimulationUrlText.textContent = getPublicSimulationUrl();
   }
 
-  refs.publicSimulationResults.innerHTML = results.length ? results.map((item) => `
-    <article class="simulation-result-card">
-      <div class="chip-row">
-        <span class="tag">${escapeHtml(item.simulationType)}</span>
-        <span class="rank-badge">${item.position}</span>
-      </div>
-      <h3>${escapeHtml(item.studentName)}</h3>
-      <p>${escapeHtml(item.dni)} · ${formatDate(item.date)}</p>
-      <p class="simulation-score">${item.totalScore}</p>
-      <p class="supporting-copy">Puntaje total obtenido en ${escapeHtml(state.data.school.name)}.</p>
-    </article>
-  `).join("") : `
+  const studentResultsMarkup = results.length ? `
+    <div class="lookup-result-grid">
+      ${results.map((item) => `
+        <article class="simulation-result-card">
+          <div class="chip-row">
+            <span class="tag">${escapeHtml(item.simulationType)}</span>
+            <span class="rank-badge">${item.position}</span>
+          </div>
+          <h3>${escapeHtml(item.studentName)}</h3>
+          <p>${escapeHtml(item.dni)} · ${formatDate(item.date)}</p>
+          <p class="simulation-score">${item.totalScore}</p>
+          <p class="supporting-copy">Tu puntaje y tu puesto en ${escapeHtml(state.data.school.name)}.</p>
+        </article>
+      `).join("")}
+    </div>
+  ` : `
     <div class="lookup-empty-card">
       ${dniValue ? `No se encontraron resultados para el DNI ${escapeHtml(dniValue)}${simulationType !== "Todas" ? ` en ${escapeHtml(simulationType)}` : ""}.` : "Ingresa el DNI del estudiante para consultar su simulacro."}
     </div>
   `;
+
+  const topThreeMarkup = topThree.length ? `
+    <div class="divider"></div>
+    <div class="section-heading">
+      <p class="eyebrow">Ranking destacado</p>
+      <h2>3 primeros puestos${resolvedSimulationType ? ` · ${escapeHtml(resolvedSimulationType)}` : ""}</h2>
+    </div>
+    <div class="lookup-result-grid">
+      ${topThree.map((item) => `
+        <article class="simulation-result-card">
+          <div class="chip-row">
+            <span class="rank-badge">${item.position}</span>
+            <span class="tag">${escapeHtml(item.simulationType)}</span>
+          </div>
+          <h3>${escapeHtml(item.studentName)}</h3>
+          <p>DNI ${escapeHtml(item.dni)}</p>
+          <p class="simulation-score">${item.totalScore}</p>
+          <p class="supporting-copy">Puntaje del ${item.position}° puesto.</p>
+        </article>
+      `).join("")}
+    </div>
+  ` : "";
+
+  refs.publicSimulationResults.innerHTML = `${studentResultsMarkup}${topThreeMarkup}`;
 
   const input = document.getElementById("publicSimulationDni");
   if (input) {
@@ -3482,4 +3823,357 @@ function renderPublicSimulationView() {
   if (select) {
     select.value = simulationType;
   }
+}
+
+const previousRenderProfileSectionRoleAware = renderProfileSection;
+renderProfileSection = function renderProfileSectionRoleAware() {
+  if (state.session?.role !== "Docentes") {
+    previousRenderProfileSectionRoleAware();
+    return;
+  }
+
+  const teacherName = getSessionDisplayName();
+  const visibleStudents = getStudentsForTeacher(teacherName);
+  const selectedStudent = visibleStudents.find((student) => student.id === state.selectedStudentId) || visibleStudents[0];
+
+  if (!selectedStudent) {
+    refs.sections.profile.innerHTML = `<article class="empty-card"><h3>Sin alumnos asignados</h3><p>No hay alumnos vinculados a tus aulas en este momento.</p></article>`;
+    return;
+  }
+
+  const grades = state.data.grades.filter((grade) =>
+    grade.studentId === selectedStudent.id &&
+    normalizeText(grade.teacher) === normalizeText(teacherName)
+  );
+
+  refs.sections.profile.innerHTML = `
+    ${renderSectionHeader("Historial academico del alumno", "Vista restringida al area y a las evaluaciones que te corresponden como docente.")}
+    <div class="grid-two">
+      <article class="profile-card">
+        <div class="profile-avatar">${initials(selectedStudent.fullName)}</div>
+        <h3>${escapeHtml(selectedStudent.fullName)}</h3>
+        <p class="supporting-copy">DNI ${escapeHtml(selectedStudent.dni)} · ${escapeHtml(`${selectedStudent.level} ${selectedStudent.grade} ${selectedStudent.section}`)}</p>
+      </article>
+      <article class="profile-card">
+        <h3>Historial del area</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Curso</th>
+                <th>Trimestre</th>
+                <th>Tipo</th>
+                <th>Nota</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${grades.map((grade) => `
+                <tr>
+                  <td>${escapeHtml(grade.course)}</td>
+                  <td>${escapeHtml(grade.trimester || normalizeTrimester(grade.period))}</td>
+                  <td>${escapeHtml(grade.assessmentType || "Examen de avance")}</td>
+                  <td>${grade.score}</td>
+                </tr>
+              `).join("") || '<tr><td colspan="4">No hay notas registradas para este alumno en tu area.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  `;
+};
+
+renderScheduleSection = function renderScheduleSectionRoleAware() {
+  const teacherView = state.session?.role === "Docentes";
+
+  if (teacherView) {
+    const teacherName = getSessionDisplayName();
+    const teacherSchedules = getSchedulesForTeacher(teacherName);
+    const selected = teacherSchedules.find((item) => item.id === state.selectedScheduleId) || teacherSchedules[0];
+    state.selectedScheduleId = selected?.id || null;
+
+    refs.sections.schedule.innerHTML = `
+      ${renderSectionHeader("Mis horarios", "Consulta solo los horarios que ya fueron asignados a tu usuario desde administracion.")}
+      ${selected ? `
+        <div class="split-panel">
+          <article class="glass-card">
+            <h3>Busqueda de horario</h3>
+            <label class="field">
+              <span>Horario asignado</span>
+              <select id="scheduleSelect">
+                ${teacherSchedules.map((item) => `<option value="${item.id}" ${item.id === selected.id ? "selected" : ""}>${escapeHtml(`${item.level} · ${item.sectionKey}`)}</option>`).join("")}
+              </select>
+            </label>
+            <div class="badge-grid">
+              <span class="tag">${escapeHtml(selected.level)}</span>
+              <span class="tag">${escapeHtml(selected.room)}</span>
+              <span class="tag">${escapeHtml(selected.sectionKey)}</span>
+            </div>
+          </article>
+
+          <article class="table-card">
+            <h3>${escapeHtml(selected.sectionKey)}</h3>
+            <p class="supporting-copy">${escapeHtml(selected.level)} · ${escapeHtml(selected.room)}</p>
+            <div class="table-wrap">
+              <table class="schedule-grid-table">
+                <thead>
+                  <tr>${selected.days.map((day) => `<th>${escapeHtml(day)}</th>`).join("")}</tr>
+                </thead>
+                <tbody>
+                  ${selected.rows.map((row) => `<tr>${row.map((cell) => renderReadonlyScheduleCell(cell)).join("")}</tr>`).join("")}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      ` : `<article class="empty-card"><h3>Sin horarios asignados</h3><p>Administracion aun no ha vinculado horarios a tu usuario.</p></article>`}
+    `;
+    return;
+  }
+
+  ensureSelectedSchedule();
+  const schedule = getSelectedSchedule();
+  if (!schedule) {
+    refs.sections.schedule.innerHTML = `<article class="empty-card"><h3>Sin horarios</h3><p>Registra el primer horario para empezar a editarlo.</p></article>`;
+    return;
+  }
+  const scheduleStudents = state.data.students.filter((student) => normalizeText(schedule.sectionKey).includes(normalizeText(student.grade)) && normalizeText(schedule.sectionKey).includes(normalizeText(student.section)));
+
+  refs.sections.schedule.innerHTML = `
+    ${renderSectionHeader("Horarios escolares", "Horarios editables por nivel con recreo automatico y visualizacion por colores para identificar cada bloque.")}
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Crear horario</h3>
+        <form id="scheduleCreateForm" class="form-grid">
+          <label class="field">
+            <span>Nivel</span>
+            <select name="level">
+              <option value="Primaria">Primaria</option>
+              <option value="Secundaria">Secundaria</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Seccion</span>
+            <input name="sectionKey" type="text" placeholder="Primaria 5° A" required>
+          </label>
+          <label class="field field-full">
+            <span>Aula</span>
+            <input name="room" type="text" placeholder="Aula 205" required>
+          </label>
+          <div class="field field-full">
+            <button class="button button-primary" type="submit">Crear horario</button>
+          </div>
+        </form>
+
+        <div class="divider"></div>
+        <label class="field">
+          <span>Horario activo</span>
+          <select id="scheduleSelect">
+            ${state.data.schedules.map((item) => `<option value="${item.id}" ${item.id === schedule.id ? "selected" : ""}>${escapeHtml(`${item.level} · ${item.sectionKey}`)}</option>`).join("")}
+          </select>
+        </label>
+      </article>
+
+      <article class="table-card">
+        <h3>${escapeHtml(schedule.sectionKey)}</h3>
+        <p class="supporting-copy">${escapeHtml(schedule.level)} · ${escapeHtml(schedule.room)}</p>
+        <form id="scheduleEditorForm" class="form-stack">
+          <div class="form-grid">
+            <label class="field">
+              <span>Seccion</span>
+              <input name="sectionKey" type="text" value="${escapeHtml(schedule.sectionKey)}">
+            </label>
+            <label class="field">
+              <span>Aula</span>
+              <input name="room" type="text" value="${escapeHtml(schedule.room)}">
+            </label>
+          </div>
+          <input type="hidden" name="rowCount" value="${schedule.rows.length}">
+          <div class="table-wrap input-table">
+            <table class="schedule-grid-table input-table">
+              <thead>
+                <tr>${schedule.days.map((day) => `<th>${escapeHtml(day)}</th>`).join("")}</tr>
+              </thead>
+              <tbody>
+                ${schedule.rows.map((row, rowIndex) => `
+                  <tr>${row.map((cell, cellIndex) => renderEditableScheduleCell(cell, rowIndex, cellIndex)).join("")}</tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="button-row">
+            <button class="button button-secondary" type="button" data-add-schedule-row="true">Agregar bloque</button>
+            <button class="button button-primary" type="submit">Guardar horario</button>
+          </div>
+        </form>
+      </article>
+    </div>
+
+    <article class="table-card">
+      <h3>Alumnos por aula</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Alumno</th>
+              <th>Nivel</th>
+              <th>Grado</th>
+              <th>Seccion</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${scheduleStudents.map((student) => `
+              <tr>
+                <td>${escapeHtml(student.fullName)}</td>
+                <td>${escapeHtml(student.level)}</td>
+                <td>${escapeHtml(student.grade)}</td>
+                <td>${escapeHtml(student.section)}</td>
+              </tr>
+            `).join("") || '<tr><td colspan="4">No hay alumnos asignados a esta aula todavia.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `;
+};
+
+function getAttendanceEntriesByDate(date) {
+  return state.data.attendance.filter((entry) => entry.date === date);
+}
+
+function getFilteredAttendanceRows() {
+  return getAttendanceEntriesByDate(state.attendanceFilters.date).filter((entry) => {
+    return state.attendanceFilters.status === "Todos" || entry.status === state.attendanceFilters.status;
+  });
+}
+
+function nextAttendanceId() {
+  const max = state.data.attendance.reduce((currentMax, entry) => {
+    const match = String(entry.id || "").match(/ATT-(\d+)/);
+    return Math.max(currentMax, match ? Number(match[1]) : 0);
+  }, 0);
+  return `ATT-${String(max + 1).padStart(4, "0")}`;
+}
+
+function renderAttendanceSection() {
+  if (!refs.sections.attendance) {
+    return;
+  }
+
+  const allowed = ["Administrador", "Direccion", "Secretaria"];
+  if (!allowed.includes(state.session?.role)) {
+    refs.sections.attendance.innerHTML = `<article class="empty-card"><h3>Modulo no disponible</h3><p>El registro de asistencias esta habilitado solo para roles administrativos.</p></article>`;
+    return;
+  }
+
+  const rows = getFilteredAttendanceRows();
+  const stats = {
+    presente: rows.filter((entry) => entry.status === "Presente").length,
+    tarde: rows.filter((entry) => entry.status === "Llego tarde").length,
+    ausente: rows.filter((entry) => entry.status === "Ausente").length,
+    retirado: rows.filter((entry) => entry.status === "Retirado").length
+  };
+
+  refs.sections.attendance.innerHTML = `
+    ${renderSectionHeader("Registro de asistencias", "Control diario de estudiantes con los estados presente, llego tarde, ausente y retirado.", `
+      <div class="button-row">
+        <button class="button button-soft" type="button" data-export-report="asistencias">Exportar Excel</button>
+        <button class="button button-secondary" type="button" data-print-report="asistencias">Imprimir A4</button>
+      </div>
+    `)}
+
+    <div class="metric-grid">
+      <article class="mini-card">
+        <h3>Presentes</h3>
+        <p class="metric-number">${stats.presente}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Llegaron tarde</h3>
+        <p class="metric-number">${stats.tarde}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Ausentes</h3>
+        <p class="metric-number">${stats.ausente}</p>
+      </article>
+      <article class="mini-card">
+        <h3>Retirados</h3>
+        <p class="metric-number">${stats.retirado}</p>
+      </article>
+    </div>
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Registrar asistencia</h3>
+        <form id="attendanceForm" class="form-stack">
+          <div class="form-grid">
+            <label class="field">
+              <span>Fecha</span>
+              <input name="date" type="date" value="${escapeHtml(state.attendanceFilters.date)}" required>
+            </label>
+            <label class="field">
+              <span>Estado</span>
+              <select name="status">
+                ${["Presente", "Llego tarde", "Ausente", "Retirado"].map((item) => `<option value="${item}">${item}</option>`).join("")}
+              </select>
+            </label>
+          </div>
+          <label class="field">
+            <span>Alumno</span>
+            <select name="studentId">
+              ${state.data.students.map((student) => `<option value="${student.id}">${escapeHtml(student.fullName)} · ${escapeHtml(`${student.grade} ${student.section}`)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Observaciones</span>
+            <textarea name="notes" placeholder="Detalle opcional del registro"></textarea>
+          </label>
+          <button class="button button-primary" type="submit">Guardar asistencia</button>
+        </form>
+      </article>
+
+      <article class="table-card">
+        <h3>Filtro diario</h3>
+        <div class="compact-form-grid">
+          <label class="field">
+            <span>Fecha</span>
+            <input id="attendanceDateFilter" type="date" value="${escapeHtml(state.attendanceFilters.date)}">
+          </label>
+          <label class="field">
+            <span>Estado</span>
+            <select id="attendanceStatusFilter">
+              ${["Todos", "Presente", "Llego tarde", "Ausente", "Retirado"].map((item) => `<option value="${item}" ${item === state.attendanceFilters.status ? "selected" : ""}>${item}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Alumno</th>
+                <th>DNI</th>
+                <th>Aula</th>
+                <th>Estado</th>
+                <th>Observaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((entry) => {
+                const student = getStudentById(entry.studentId);
+                return `
+                  <tr>
+                    <td>${escapeHtml(student?.fullName || "Alumno")}</td>
+                    <td>${escapeHtml(student?.dni || "-")}</td>
+                    <td>${escapeHtml(student ? `${student.level} ${student.grade} ${student.section}` : "-")}</td>
+                    <td>${renderStatusPill(entry.status)}</td>
+                    <td>${escapeHtml(entry.notes || "-")}</td>
+                  </tr>
+                `;
+              }).join("") || '<tr><td colspan="5">No hay asistencias para el filtro actual.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  `;
 }

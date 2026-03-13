@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Gestion Educativa</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div class="page-backdrop" aria-hidden="true"></div>
@@ -40,11 +40,8 @@
         <article class="hero-card">
           <h2>Estado de acceso</h2>
           <ul class="credentials">
-            <li><strong>admin</strong> / <code>admin123</code> · Melanie Castro Jones</li>
-            <li><strong>direccion</strong> / <code>direccion123</code></li>
-            <li><strong>cvega</strong> / <code>docente123</code></li>
-            <li><strong>atorres</strong> / <code>docente123</code></li>
-            <li><strong>pmedina</strong> / <code>docente123</code></li>
+            <li>Verificando acceso institucional...</li>
+            <li>Usa tu usuario y contrasena asignados.</li>
           </ul>
           <div class="button-row">
             <button type="button" class="button button-secondary" data-open-public-simulations="true">Consultar simulacro</button>
@@ -95,7 +92,7 @@
 
       <article class="hero-card public-link-card">
         <h2>Acceso para estudiantes</h2>
-        <p id="publicSimulationUrlText" class="supporting-copy">Comparte este mismo enlace con el hash de consulta publica.</p>
+        <p id="publicSimulationUrlText" class="supporting-copy">Comparte este enlace publico de consulta de simulacros.</p>
         <div class="button-row">
           <button type="button" class="button button-primary" data-copy-public-simulations-link="true">Copiar enlace</button>
           <button type="button" class="button button-secondary" data-close-public-simulations="true">Volver al login</button>
@@ -174,6 +171,7 @@
 
       <section id="dashboardSection" class="content-section" data-section="dashboard"></section>
       <section id="directionSection" class="content-section" data-section="direction"></section>
+      <section id="attendanceSection" class="content-section" data-section="attendance"></section>
       <section id="admissionsSection" class="content-section" data-section="admissions"></section>
       <section id="profileSection" class="content-section" data-section="profile"></section>
       <section id="academicSection" class="content-section" data-section="academic"></section>
@@ -191,8 +189,8 @@
     </main>
   </div>
 
-  <script src="app.js"></script>
-  <script src="enhancements.js"></script>
-  <script src="backend.js"></script>
+  <script src="/app.js"></script>
+  <script src="/enhancements.js"></script>
+  <script src="/backend.js"></script>
 </body>
 </html>

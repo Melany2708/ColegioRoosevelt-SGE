@@ -1357,3 +1357,200 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 }
+
+.schedule-grid-table td,
+.schedule-grid-table th {
+  text-align: center;
+}
+
+.schedule-cell {
+  font-weight: 700;
+  border-radius: 12px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.schedule-grid-table tbody tr:hover .schedule-cell {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(4, 44, 75, 0.08);
+}
+
+.schedule-empty {
+  background: rgba(4, 44, 75, 0.02);
+}
+
+.schedule-break {
+  background: linear-gradient(135deg, rgba(226, 183, 21, 0.24), rgba(255, 244, 189, 0.88));
+  color: #7c5c00;
+}
+
+.schedule-dismissal {
+  background: linear-gradient(135deg, rgba(194, 140, 224, 0.22), rgba(240, 228, 247, 0.92));
+  color: #6f3d8a;
+}
+
+.schedule-tone-1 {
+  background: rgba(4, 44, 75, 0.1);
+  color: #042c4b;
+}
+
+.schedule-tone-2 {
+  background: rgba(194, 140, 224, 0.18);
+  color: #5a2e71;
+}
+
+.schedule-tone-3 {
+  background: rgba(226, 183, 21, 0.18);
+  color: #7a6200;
+}
+
+.schedule-tone-4 {
+  background: rgba(4, 44, 75, 0.07);
+  color: #0d507f;
+}
+
+.schedule-tone-5 {
+  background: rgba(194, 140, 224, 0.12);
+  color: #7a5192;
+}
+
+.schedule-grid-table.input-table td {
+  padding: 0.4rem;
+}
+
+.schedule-grid-table.input-table td input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  text-align: center;
+  font-weight: 700;
+  padding: 0.8rem 0.55rem;
+}
+
+/* Final institutional light override: white + navy + lilac */
+:root {
+  --accent: #c28ce0;
+  --accent-strong: #d8b4eb;
+  --accent-cool: #042c4b;
+}
+
+body,
+body[data-theme="roosevelt"] {
+  background: linear-gradient(180deg, #ffffff 0%, #f7faff 52%, #fcf8ff 100%);
+}
+
+.page-backdrop,
+body[data-theme="roosevelt"] .page-backdrop {
+  background:
+    radial-gradient(circle at top left, rgba(4, 44, 75, 0.07), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(194, 140, 224, 0.14), transparent 26%),
+    radial-gradient(circle at center right, rgba(194, 140, 224, 0.08), transparent 18%);
+}
+
+.button-primary {
+  background: linear-gradient(135deg, #042c4b, #c28ce0);
+  box-shadow: 0 16px 32px rgba(4, 44, 75, 0.16);
+}
+
+.button-secondary {
+  background: rgba(194, 140, 224, 0.11);
+  border-color: rgba(194, 140, 224, 0.24);
+}
+
+.button-soft {
+  background: rgba(4, 44, 75, 0.08);
+  color: #042c4b;
+}
+
+.role-badge {
+  color: #ffffff;
+  background: linear-gradient(135deg, #042c4b, #c28ce0);
+}
+
+.status-pill.warning {
+  background: rgba(194, 140, 224, 0.15);
+  color: #71418b;
+}
+
+.nav-link:hover,
+.nav-link.is-active {
+  background: rgba(194, 140, 224, 0.12);
+  border-color: rgba(194, 140, 224, 0.3);
+}
+
+.accent-line,
+.bar-fill {
+  background: linear-gradient(135deg, #042c4b, #c28ce0);
+}
+
+.rank-badge {
+  background: linear-gradient(135deg, #042c4b, #c28ce0);
+  color: #ffffff;
+}
+
+.schedule-break,
+.schedule-tone-3 {
+  background: rgba(194, 140, 224, 0.18);
+  color: #71418b;
+}
+
+.schedule-dismissal {
+  background: rgba(4, 44, 75, 0.12);
+  color: #042c4b;
+}
+
+.public-lookup-view {
+  grid-template-columns: minmax(0, 920px);
+  justify-content: center;
+  justify-items: center;
+  align-content: start;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.public-lookup-view .hero-panel,
+.public-lookup-view .login-card {
+  width: min(100%, 920px);
+  justify-self: center;
+  text-align: center;
+}
+
+.public-lookup-view .hero-brand,
+.public-lookup-view .button-row,
+.public-lookup-view .chip-row,
+.public-lookup-view .section-heading {
+  justify-content: center;
+  text-align: center;
+}
+
+.public-lookup-view .hero-copy,
+.public-lookup-view .supporting-copy,
+.public-link-card,
+.lookup-empty-card {
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.public-lookup-view .field span,
+.public-lookup-view .section-heading p,
+.public-lookup-view .section-heading h2 {
+  text-align: center;
+}
+
+.public-lookup-view input,
+.public-lookup-view select {
+  text-align: center;
+}
+
+.public-lookup-view .lookup-result-grid {
+  justify-items: center;
+}
+
+.public-lookup-view .simulation-result-card {
+  width: min(100%, 460px);
+  text-align: center;
+}
+
+.public-lookup-view .simulation-result-card .chip-row {
+  justify-content: center;
+}

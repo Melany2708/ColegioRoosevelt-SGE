@@ -270,6 +270,12 @@ export function createDefaultAppState() {
       { id: "DOCS-002", studentId: "ALU-002", type: "Constancia de matricula", issuedAt: today, code: `CM-${year}-0001` },
       { id: "DOCS-003", studentId: "ALU-004", type: "Constancia de pago", issuedAt: today, code: `CP-${year}-0001` }
     ],
+    attendance: [
+      { id: "ATT-0001", studentId: "ALU-001", date: today, status: "Presente", notes: "" },
+      { id: "ATT-0002", studentId: "ALU-002", date: today, status: "Llego tarde", notes: "Ingreso despues del toque de formacion." },
+      { id: "ATT-0003", studentId: "ALU-003", date: today, status: "Ausente", notes: "" },
+      { id: "ATT-0004", studentId: "ALU-004", date: today, status: "Retirado", notes: "Retiro autorizado por el apoderado." }
+    ],
     gradeTables: [],
     simulations: []
   };
@@ -406,6 +412,14 @@ export function normalizeAppState(source) {
     issuedAt: String(documentItem.issuedAt || isoDate(0)),
     code: String(documentItem.code || `DOC-${nextState.school.academicYear}-${String(index + 1).padStart(4, "0")}`)
   })) : defaults.documents;
+
+  nextState.attendance = Array.isArray(input.attendance) ? input.attendance.map((entry, index) => ({
+    id: String(entry.id || `ATT-${String(index + 1).padStart(4, "0")}`),
+    studentId: String(entry.studentId || ""),
+    date: String(entry.date || isoDate(0)),
+    status: String(entry.status || "Presente"),
+    notes: String(entry.notes || "")
+  })) : defaults.attendance;
 
   nextState.gradeTables = Array.isArray(input.gradeTables) ? input.gradeTables.map((table, index) => ({
     id: String(table.id || `GTB-${String(index + 1).padStart(3, "0")}`),

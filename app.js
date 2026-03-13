@@ -22,11 +22,11 @@ const MODULES = [
 ];
 
 const USERS = {
-  admin: { username: "admin", password: "admin123", name: "Karen Salas", role: "Administrador" },
-  direccion: { username: "direccion", password: "direccion123", name: "Luis Paredes", role: "Direccion" },
-  docente: { username: "docente", password: "docente123", name: "Carlos Vega", role: "Docentes" },
-  tesoreria: { username: "tesoreria", password: "tesoreria123", name: "Rosa Medina", role: "Caja / tesoreria" },
-  secretaria: { username: "secretaria", password: "secretaria123", name: "Andrea Rojas", role: "Secretaria" }
+  admin: { username: "admin", password: "gestion-servidor", name: "Karen Salas", role: "Administrador" },
+  direccion: { username: "direccion", password: "gestion-servidor", name: "Luis Paredes", role: "Direccion" },
+  docente: { username: "docente", password: "gestion-servidor", name: "Carlos Vega", role: "Docentes" },
+  tesoreria: { username: "tesoreria", password: "gestion-servidor", name: "Rosa Medina", role: "Caja / tesoreria" },
+  secretaria: { username: "secretaria", password: "gestion-servidor", name: "Andrea Rojas", role: "Secretaria" }
 };
 
 const ROLE_ACCESS = {
@@ -117,7 +117,7 @@ function cacheDom() {
 function bindStaticEvents() {
   refs.loginForm.addEventListener("submit", handleLogin);
   document.getElementById("recoverPasswordBtn").addEventListener("click", () => {
-    showToast("Flujo demo: solicitar restablecimiento al administrador del sistema.");
+    showToast("Solicita el restablecimiento de contrasena al administrador del sistema.");
   });
   document.getElementById("logoutBtn").addEventListener("click", handleLogout);
   document.getElementById("printPageBtn").addEventListener("click", () => window.print());
@@ -357,7 +357,7 @@ function createDefaultLogs() {
       user: "sistema",
       name: "Provision inicial",
       role: "Administrador",
-      action: "Base demo preparada",
+      action: "Base institucional preparada",
       timestamp: new Date().toISOString()
     }
   ];
@@ -1587,7 +1587,7 @@ function renderSecuritySection() {
       <article class="glass-card">
         <h3>Controles visibles en esta base</h3>
         <ul class="list-clean">
-          <li>Inicio de sesion con usuarios demo y permisos por rol.</li>
+          <li>Inicio de sesion institucional con permisos por rol.</li>
           <li>Registro de accesos y acciones relevantes en la bitacora.</li>
           <li>Sesion local persistente para el navegador actual.</li>
           <li>Restriccion visual de modulos segun el perfil del usuario.</li>
@@ -1643,7 +1643,7 @@ function handleLogin(event) {
   const user = USERS[username];
 
   if (!user || user.password !== password) {
-    showToast("Credenciales invalidas. Usa uno de los usuarios demo visibles en login.");
+    showToast("Credenciales invalidas. Verifica tu usuario y contrasena institucional.");
     return;
   }
 

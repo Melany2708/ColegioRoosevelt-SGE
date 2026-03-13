@@ -40,7 +40,9 @@ export default async function handler(request) {
       return jsonResponse({
         ok: true,
         schoolName: state.school?.name || "Colegio Privado Roosevelt",
-        results: []
+        results: [],
+        topThree: [],
+        simulationTypeApplied: ""
       });
     }
 
@@ -51,10 +53,19 @@ export default async function handler(request) {
       .filter((item) => item.dni === dni && (simulationType === "Todas" || normalizeSimulationType(item.simulationType) === normalizeSimulationType(simulationType)))
       .sort((left, right) => String(right.date || "").localeCompare(String(left.date || "")));
 
+    const simulationTypeApplied = simulationType === "Todas"
+      ? (results[0]?.simulationType || "")
+      : normalizeSimulationType(simulationType);
+    const topThree = simulationTypeApplied
+      ? buildRanking(simulations, simulationTypeApplied).slice(0, 3)
+      : [];
+
     return jsonResponse({
       ok: true,
       schoolName: state.school?.name || "Colegio Privado Roosevelt",
-      results
+      results,
+      topThree,
+      simulationTypeApplied
     });
   } catch (error) {
     return jsonResponse({
