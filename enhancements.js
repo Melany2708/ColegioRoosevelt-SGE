@@ -4,6 +4,7 @@ const originalCacheDom = cacheDom;
 const originalHandleDynamicSubmit = handleDynamicSubmit;
 const originalHandleDynamicChange = handleDynamicChange;
 const originalHandleDynamicClick = handleDynamicClick;
+const SCHOOL_LOGO_IMAGE = "assets/logo-roosevelt.svg";
 
 if (!MODULES.some((moduleItem) => moduleItem.id === "settings")) {
   MODULES.push({ id: "settings", label: "Ajustes", hint: "Tema y colegio" });
@@ -66,7 +67,8 @@ renderApp = function renderAppEnhanced() {
 renderChrome = function renderChromeEnhanced() {
   refs.schoolName.textContent = state.data.school.name;
   document.querySelectorAll(".brand-mark").forEach((element) => {
-    element.textContent = state.data.school.logo;
+    element.setAttribute("aria-label", `Logo ${state.data.school.name}`);
+    element.title = state.data.school.name;
   });
   refs.sidebarRole.textContent = state.session.role;
   refs.sidebarUser.textContent = `${getSessionDisplayName()} (${state.session.username})`;
@@ -719,7 +721,7 @@ renderSettingsSection = function renderSettingsSectionEnhanced() {
           <label class="field field-full">
             <span>Tema visual</span>
             <select name="theme" id="themePresetSelect">
-              <option value="roosevelt" ${state.data.school.theme === "roosevelt" ? "selected" : ""}>Roosevelt dorado</option>
+              <option value="roosevelt" ${state.data.school.theme === "roosevelt" ? "selected" : ""}>Roosevelt institucional</option>
               <option value="oceano" ${state.data.school.theme === "oceano" ? "selected" : ""}>Oceano</option>
               <option value="bosque" ${state.data.school.theme === "bosque" ? "selected" : ""}>Bosque</option>
               <option value="terracota" ${state.data.school.theme === "terracota" ? "selected" : ""}>Terracota</option>
@@ -776,7 +778,7 @@ buildDocumentHtml = function buildDocumentHtmlEnhanced(student, type) {
     <div class="document-canvas"${templateStyle}>
       <div class="document-overlay">
         <div class="document-header">
-          <div class="document-logo">${escapeHtml(state.data.school.logo)}</div>
+          <div class="document-logo" title="${escapeHtml(state.data.school.name)}">${escapeHtml(state.data.school.logo)}</div>
           <div>
             <p class="eyebrow" style="color:#5a6579;">Institucion educativa privada</p>
             <h3>${escapeHtml(state.data.school.name)}</h3>
@@ -855,7 +857,7 @@ printHtml = function printHtmlEnhanced(title, content) {
           .document-canvas::before { content: ""; position: absolute; inset: 0; background: rgba(255,255,255,0.18); }
           .document-overlay { position: relative; z-index: 1; max-width: 78%; margin: 0 auto; padding-top: 32px; }
           .document-header { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
-          .document-logo { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: linear-gradient(135deg, #ffb454, #ffe9b9); font-weight: 700; }
+          .document-logo { width: 82px; height: 82px; background: url('${SCHOOL_LOGO_IMAGE}') center / contain no-repeat; color: transparent; user-select: none; }
           @page { size: A4 portrait; margin: 12mm; }
         </style>
       </head>

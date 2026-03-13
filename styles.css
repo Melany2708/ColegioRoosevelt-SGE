@@ -107,24 +107,18 @@ textarea {
 }
 
 .brand-mark {
-  width: 72px;
-  height: 72px;
-  display: grid;
-  place-items: center;
-  border-radius: 24px;
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: #152032;
-  background: linear-gradient(135deg, var(--accent), #ffe5a6);
-  box-shadow: inset 0 -6px 10px rgba(255, 255, 255, 0.18);
+  width: 92px;
+  height: 92px;
+  flex: 0 0 auto;
+  background: url("assets/logo-roosevelt.svg") center / contain no-repeat;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.22));
+  color: transparent;
+  user-select: none;
 }
 
 .brand-mark-small {
-  width: 52px;
-  height: 52px;
-  border-radius: 18px;
-  font-size: 1rem;
+  width: 68px;
+  height: 68px;
 }
 
 .hero-panel h1,
@@ -690,14 +684,13 @@ tbody tr:hover {
 }
 
 .document-logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 20px;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-display);
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), #ffe9b9);
+  width: 74px;
+  height: 74px;
+  flex: 0 0 auto;
+  background: url("assets/logo-roosevelt.svg") center / contain no-repeat;
+  filter: drop-shadow(0 8px 14px rgba(20, 24, 38, 0.18));
+  color: transparent;
+  user-select: none;
 }
 
 .toast {
@@ -1006,4 +999,242 @@ body[data-theme="roosevelt"] .page-backdrop {
 .document-overlay h4 {
   margin-top: 1.25rem;
   text-align: center;
+}
+
+/* Roosevelt institutional palette override */
+:root {
+  --bg: #ffffff;
+  --bg-soft: rgba(4, 44, 75, 0.05);
+  --bg-card: rgba(255, 255, 255, 0.96);
+  --surface: rgba(255, 255, 255, 0.98);
+  --surface-soft: rgba(255, 255, 255, 0.82);
+  --text: #042c4b;
+  --text-dark: #042c4b;
+  --muted: #607185;
+  --accent: #e2b715;
+  --accent-strong: #c28ce0;
+  --accent-cool: #042c4b;
+  --border: rgba(4, 44, 75, 0.12);
+  --shadow: 0 24px 60px rgba(4, 44, 75, 0.12);
+}
+
+body {
+  color: var(--text);
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 56%, #fcf8ff 100%);
+}
+
+.page-backdrop {
+  background:
+    radial-gradient(circle at top left, rgba(4, 44, 75, 0.08), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(194, 140, 224, 0.14), transparent 24%),
+    radial-gradient(circle at center right, rgba(226, 183, 21, 0.14), transparent 18%);
+}
+
+body[data-theme="roosevelt"] {
+  --accent: #e2b715;
+  --accent-cool: #042c4b;
+  --accent-strong: #c28ce0;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 56%, #fcf8ff 100%);
+}
+
+body[data-theme="roosevelt"] .page-backdrop {
+  background:
+    radial-gradient(circle at top left, rgba(4, 44, 75, 0.08), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(194, 140, 224, 0.14), transparent 24%),
+    radial-gradient(circle at center right, rgba(226, 183, 21, 0.14), transparent 18%);
+}
+
+.hero-panel,
+.login-card,
+.topbar,
+.content-section,
+.hero-card,
+.glass-card,
+.metric-card,
+.table-card,
+.empty-card,
+.mini-card,
+.profile-card,
+.timeline-item,
+.activity-item,
+.report-card,
+.sidebar-summary,
+.notice-card,
+.document-sheet {
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 255, 0.94));
+  border-color: rgba(4, 44, 75, 0.1);
+  box-shadow: 0 24px 60px rgba(4, 44, 75, 0.1);
+}
+
+.sidebar {
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(242, 247, 255, 0.96));
+  border-color: rgba(4, 44, 75, 0.12);
+  box-shadow: 0 24px 60px rgba(4, 44, 75, 0.12);
+}
+
+.hero-panel h1,
+.hero-copy,
+.section-heading h2,
+.section-title h2,
+.section-title h3,
+.section-title p,
+.topbar h1,
+.sidebar-head h2,
+.sidebar-user,
+.field span,
+.search-box span,
+.detail-label,
+.helper-text,
+.supporting-copy,
+.sidebar-foot p,
+.topbar-date,
+.nav-link small,
+.detail-value,
+.report-card p,
+.timeline-item p,
+.activity-item p,
+.mini-card p,
+.document-sheet h3,
+.document-sheet h4,
+.document-sheet p,
+.eyebrow {
+  color: var(--text);
+}
+
+.eyebrow,
+.helper-text,
+.supporting-copy,
+.sidebar-foot p,
+.topbar-date,
+.nav-link small,
+.field span,
+.search-box span,
+.detail-label {
+  color: var(--muted);
+}
+
+.button-primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #042c4b, #0d507f);
+  box-shadow: 0 16px 32px rgba(4, 44, 75, 0.18);
+}
+
+input,
+select,
+textarea {
+  border-color: rgba(4, 44, 75, 0.14);
+  background: #ffffff;
+  color: var(--text-dark);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(226, 183, 21, 0.9);
+  box-shadow: 0 0 0 4px rgba(226, 183, 21, 0.18);
+}
+
+.button-secondary {
+  color: var(--text);
+  background: rgba(194, 140, 224, 0.12);
+  border: 1px solid rgba(194, 140, 224, 0.28);
+}
+
+.button-soft {
+  color: var(--text-dark);
+  background: rgba(226, 183, 21, 0.15);
+}
+
+.role-badge {
+  color: #042c4b;
+  background: linear-gradient(135deg, #e2b715, #f5e38b);
+}
+
+.tag,
+.status-pill {
+  border: 1px solid rgba(4, 44, 75, 0.1);
+}
+
+.tag {
+  background: rgba(4, 44, 75, 0.06);
+  color: #042c4b;
+}
+
+.status-pill.success {
+  background: rgba(53, 166, 113, 0.15);
+  color: #1d6f4b;
+}
+
+.status-pill.warning {
+  background: rgba(226, 183, 21, 0.18);
+  color: #8c6e00;
+}
+
+.status-pill.danger {
+  background: rgba(204, 96, 96, 0.14);
+  color: #8a2e2e;
+}
+
+.status-pill.info {
+  background: rgba(194, 140, 224, 0.16);
+  color: #71418b;
+}
+
+.nav-link {
+  color: var(--text);
+}
+
+.nav-link:hover,
+.nav-link.is-active {
+  background: rgba(4, 44, 75, 0.08);
+  border-color: rgba(226, 183, 21, 0.34);
+}
+
+.metric-card::after {
+  background: radial-gradient(circle, rgba(194, 140, 224, 0.18), transparent 72%);
+}
+
+th,
+td {
+  border-bottom: 1px solid rgba(4, 44, 75, 0.08);
+}
+
+th {
+  color: var(--text);
+  background: rgba(4, 44, 75, 0.05);
+}
+
+tbody tr:hover {
+  background: rgba(194, 140, 224, 0.07);
+}
+
+.profile-avatar {
+  color: #ffffff;
+  background: linear-gradient(135deg, #042c4b, #c28ce0);
+}
+
+.bar-track {
+  background: rgba(4, 44, 75, 0.08);
+}
+
+.accent-line,
+.bar-fill {
+  background: linear-gradient(135deg, #042c4b, #e2b715);
+}
+
+.link-button,
+.credentials code {
+  color: #71418b;
+}
+
+.file-input input[type="file"] {
+  background: rgba(4, 44, 75, 0.05);
+  color: var(--text);
+}
+
+.notice-card {
+  border-style: solid;
+  border-color: rgba(194, 140, 224, 0.28);
 }

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Logo Colegio Privado Roosevelt</title>
+  <desc id="desc">Escudo institucional Roosevelt con paloma, libro y lema Disciplina Fe Honor.</desc>
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f9d86a" />
+      <stop offset="50%" stop-color="#e0a81f" />
+      <stop offset="100%" stop-color="#ffd972" />
+    </linearGradient>
+    <linearGradient id="violet" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a79fe5" />
+      <stop offset="50%" stop-color="#cfc9ff" />
+      <stop offset="100%" stop-color="#7f76c0" />
+    </linearGradient>
+    <linearGradient id="silver" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#f1efff" />
+      <stop offset="100%" stop-color="#d9d8e4" />
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.3" />
+    </filter>
+    <path id="mottoCurve" d="M 150 388 Q 256 444 362 388" />
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <rect x="18" y="42" width="172" height="12" rx="4" fill="url(#gold)" />
+    <rect x="322" y="42" width="172" height="12" rx="4" fill="url(#gold)" />
+    <circle cx="256" cy="48" r="11" fill="url(#gold)" />
+  </g>
+
+  <text x="256" y="32" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="22" fill="#101010" stroke="#e3b642" stroke-width="1.8" letter-spacing="1.5">INSTITUCION EDUCATIVA PRIVADA</text>
+  <text x="256" y="102" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="72" fill="#111111" stroke="#d8d6de" stroke-width="2">Roosevelt</text>
+
+  <path d="M 84 116 L 428 116 L 428 326 C 428 414 361 478 256 498 C 151 478 84 414 84 326 Z" fill="url(#gold)" />
+  <path d="M 102 132 L 410 132 L 410 320 C 410 396 351 452 256 472 C 161 452 102 396 102 320 Z" fill="url(#violet)" stroke="#f4e7b2" stroke-width="2" />
+  <path d="M 102 132 L 410 132 L 410 320 C 410 396 351 452 256 472 C 161 452 102 396 102 320 Z" fill="url(#violet)" opacity="0.55" />
+  <path d="M 104 134 C 198 168 310 164 408 136" fill="none" stroke="#ffffff" stroke-opacity="0.2" stroke-width="18" />
+  <path d="M 168 186 C 192 162 232 168 260 204 C 278 228 306 242 340 230" fill="none" stroke="url(#silver)" stroke-width="8" stroke-linecap="round" />
+  <path d="M 204 148 C 238 168 259 202 268 244" fill="none" stroke="url(#silver)" stroke-width="8" stroke-linecap="round" />
+  <path d="M 252 154 C 286 182 302 214 304 246" fill="none" stroke="url(#silver)" stroke-width="8" stroke-linecap="round" />
+  <path d="M 156 300 C 196 304 220 286 244 250 C 270 212 310 218 346 240" fill="none" stroke="url(#silver)" stroke-width="7" stroke-linecap="round" />
+  <path d="M 340 230 L 357 223 L 348 240" fill="none" stroke="url(#silver)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+
+  <path d="M 154 334 Q 256 324 358 334" fill="none" stroke="url(#silver)" stroke-width="6" stroke-linecap="round" />
+  <path d="M 172 325 Q 256 344 340 325" fill="none" stroke="url(#silver)" stroke-width="4" stroke-linecap="round" />
+  <path d="M 246 312 L 238 336" stroke="url(#silver)" stroke-width="4" stroke-linecap="round" />
+  <path d="M 256 311 L 256 338" stroke="url(#silver)" stroke-width="4" stroke-linecap="round" />
+  <path d="M 266 312 L 274 336" stroke="url(#silver)" stroke-width="4" stroke-linecap="round" />
+
+  <text font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="url(#gold)" letter-spacing="1.6">
+    <textPath href="#mottoCurve" startOffset="50%" text-anchor="middle">DISCIPLINA FE HONOR</textPath>
+  </text>
+  <text x="256" y="436" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="url(#gold)" letter-spacing="1.8">CAJAMARCA</text>
+</svg>
