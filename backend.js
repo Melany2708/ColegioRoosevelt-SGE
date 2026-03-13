@@ -474,8 +474,34 @@ function rebindAuthControlsToBackend() {
   }
 }
 
+function interceptAuthSubmit(event) {
+  if (event.target?.id !== "loginForm") {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  handleLogin({
+    preventDefault() {},
+    currentTarget: event.target
+  });
+}
+
+function interceptAuthClick(event) {
+  const logoutButton = event.target?.closest?.("#logoutBtn");
+  if (!logoutButton) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  handleLogout();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   rebindAuthControlsToBackend();
+  document.addEventListener("submit", interceptAuthSubmit, true);
+  document.addEventListener("click", interceptAuthClick, true);
   renderLoginStatus();
   initializeBackend();
 });
