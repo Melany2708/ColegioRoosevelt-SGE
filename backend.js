@@ -49,6 +49,17 @@ function isHostedMode() {
   return window.location.protocol !== "file:";
 }
 
+function useNativeHostedAuth() {
+  return isHostedMode();
+}
+
+function submitHostedLoginForm(form) {
+  if (!form) {
+    return;
+  }
+  HTMLFormElement.prototype.submit.call(form);
+}
+
 loadFromStorage = function loadFromStorageBackendAware(key, fallbackValue) {
   if (isHostedMode() && key === STORAGE_KEYS.session) {
     return null;
@@ -70,11 +81,12 @@ saveToStorage = function saveToStorageBackendAware(key, value) {
 handleLogin = async function handleLoginBackend(event) {
   event.preventDefault();
 
+  if (useNativeHostedAuth()) {
+    submitHostedLoginForm(event.currentTarget);
+    return;
+  }
+
   if (!backendRuntime.available) {
-    if (isHostedMode()) {
-      showToast("El acceso institucional aun se esta conectando con el servidor. Intenta nuevamente en unos segundos.", "error");
-      return;
-    }
     localHandleLogin(event);
     return;
   }
@@ -137,6 +149,11 @@ handleLogin = async function handleLoginBackend(event) {
 window.__backendHandleLogin = handleLogin;
 
 handleLogout = async function handleLogoutBackend() {
+  if (useNativeHostedAuth()) {
+    window.location.assign("/api/logout-web");
+    return;
+  }
+
   if (!backendRuntime.available) {
     localHandleLogout();
     return;
@@ -465,7 +482,13 @@ function rebindAuthControlsToBackend() {
   if (refs.loginForm) {
     refs.loginForm.removeEventListener("submit", localHandleLogin);
     refs.loginForm.removeEventListener("submit", handleLogin);
-    refs.loginForm.addEventListener("submit", handleLogin);
+    if (!useNativeHostedAuth()) {
+      refs.loginForm.addEventListener("submit", handleLogin);
+    }
+  }
+
+  if (useNativeHostedAuth()) {
+    return;
   }
 
   const logoutButton = document.getElementById("logoutBtn");
@@ -502,8 +525,10 @@ function interceptAuthClick(event) {
 
 document.addEventListener("DOMContentLoaded", () => {
   rebindAuthControlsToBackend();
-  document.addEventListener("submit", interceptAuthSubmit, true);
-  document.addEventListener("click", interceptAuthClick, true);
+  if (!useNativeHostedAuth()) {
+    document.addEventListener("submit", interceptAuthSubmit, true);
+    document.addEventListener("click", interceptAuthClick, true);
+  }
   renderLoginStatus();
   initializeBackend();
 });

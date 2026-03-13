@@ -68,9 +68,14 @@ const refs = {};
 
 document.addEventListener("DOMContentLoaded", init);
 
+function isHostedRuntime() {
+  return window.location.protocol !== "file:";
+}
+
 function init() {
   cacheDom();
   bindStaticEvents();
+  configureHostedAuthForm();
   state.data = loadFromStorage(STORAGE_KEYS.data, createDefaultData());
   state.logs = loadFromStorage(STORAGE_KEYS.logs, createDefaultLogs());
   state.session = loadFromStorage(STORAGE_KEYS.session, null);
@@ -83,6 +88,7 @@ function init() {
 
   state.selectedStudentId = state.data.students[0] ? state.data.students[0].id : null;
   renderApp();
+  consumeAuthFlashFromUrl();
 }
 
 function cacheDom() {
@@ -115,7 +121,9 @@ function cacheDom() {
 }
 
 function bindStaticEvents() {
-  refs.loginForm.addEventListener("submit", handleLogin);
+  if (!isHostedRuntime()) {
+    refs.loginForm.addEventListener("submit", handleLogin);
+  }
   document.getElementById("recoverPasswordBtn").addEventListener("click", () => {
     showToast("Solicita el restablecimiento de contrasena al administrador del sistema.");
   });
@@ -131,6 +139,40 @@ function bindStaticEvents() {
   document.addEventListener("click", handleDynamicClick);
   document.addEventListener("submit", handleDynamicSubmit);
   document.addEventListener("change", handleDynamicChange);
+}
+
+function configureHostedAuthForm() {
+  if (!refs.loginForm || !isHostedRuntime()) {
+    return;
+  }
+
+  refs.loginForm.setAttribute("method", "post");
+  refs.loginForm.setAttribute("action", "/api/login-web");
+}
+
+function consumeAuthFlashFromUrl() {
+  if (!isHostedRuntime()) {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  const loginError = url.searchParams.get("login_error");
+  const loggedOut = url.searchParams.get("logout");
+
+  if (!loginError && !loggedOut) {
+    return;
+  }
+
+  if (loginError) {
+    showToast(loginError, "error");
+  } else if (loggedOut === "1") {
+    showToast("La sesion fue cerrada correctamente.");
+  }
+
+  url.searchParams.delete("login_error");
+  url.searchParams.delete("logout");
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, document.title, nextUrl || "/");
 }
 
 function createDefaultData() {
@@ -1635,8 +1677,8 @@ function renderSecuritySection() {
     </article>
   `;
 }
-function handleLogin(event) {
-  if (window.location.protocol !== "file:" && typeof window.__backendHandleLogin === "function") {
+async function handleLogin(event) {
+  if (isHostedRuntime() && typeof window.__backendHandleLogin === "function") {
     return window.__backendHandleLogin(event);
   }
 
@@ -1644,6 +1686,12 @@ function handleLogin(event) {
   const formData = new FormData(event.currentTarget);
   const username = normalizeText(formData.get("username"));
   const password = String(formData.get("password") || "");
+
+  if (isHostedRuntime()) {
+    HTMLFormElement.prototype.submit.call(event.currentTarget);
+    return;
+  }
+
   const user = USERS[username];
 
   if (!user || user.password !== password) {
@@ -1664,9 +1712,14 @@ function handleLogin(event) {
   showToast(`Bienvenido(a), ${user.name}.`);
 }
 
-function handleLogout() {
-  if (window.location.protocol !== "file:" && typeof window.__backendHandleLogout === "function") {
+async function handleLogout() {
+  if (isHostedRuntime() && typeof window.__backendHandleLogout === "function") {
     return window.__backendHandleLogout();
+  }
+
+  if (isHostedRuntime()) {
+    window.location.assign("/api/logout-web");
+    return;
   }
 
   if (state.session) {

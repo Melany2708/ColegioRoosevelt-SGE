@@ -494,7 +494,7 @@ navigateTo = function navigateToEnhanced(sectionId) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
-handleLogin = function handleLoginEnhanced(event) {
+handleLogin = async function handleLoginEnhanced(event) {
   if (window.location.protocol !== "file:" && typeof window.__backendHandleLogin === "function") {
     return window.__backendHandleLogin(event);
   }
@@ -503,6 +503,12 @@ handleLogin = function handleLoginEnhanced(event) {
   const formData = new FormData(event.currentTarget);
   const username = normalizeText(formData.get("username"));
   const password = String(formData.get("password") || "");
+
+  if (window.location.protocol !== "file:") {
+    HTMLFormElement.prototype.submit.call(event.currentTarget);
+    return;
+  }
+
   const user = USERS[username];
 
   if (!user || user.password !== password) {
