@@ -134,6 +134,7 @@ handleLogin = async function handleLoginBackend(event) {
     }
   }
 };
+window.__backendHandleLogin = handleLogin;
 
 handleLogout = async function handleLogoutBackend() {
   if (!backendRuntime.available) {
@@ -155,6 +156,7 @@ handleLogout = async function handleLogoutBackend() {
   renderLoginStatus();
   showToast("La sesion fue cerrada correctamente.");
 };
+window.__backendHandleLogout = handleLogout;
 
 recordLog = function recordLogBackend(user, action) {
   if (!backendRuntime.available || !backendRuntime.authenticated || !backendRuntime.remoteLoaded) {

@@ -495,6 +495,10 @@ navigateTo = function navigateToEnhanced(sectionId) {
 };
 
 handleLogin = function handleLoginEnhanced(event) {
+  if (window.location.protocol !== "file:" && typeof window.__backendHandleLogin === "function") {
+    return window.__backendHandleLogin(event);
+  }
+
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   const username = normalizeText(formData.get("username"));

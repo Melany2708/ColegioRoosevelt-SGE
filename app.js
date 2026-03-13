@@ -1636,6 +1636,10 @@ function renderSecuritySection() {
   `;
 }
 function handleLogin(event) {
+  if (window.location.protocol !== "file:" && typeof window.__backendHandleLogin === "function") {
+    return window.__backendHandleLogin(event);
+  }
+
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   const username = normalizeText(formData.get("username"));
@@ -1661,6 +1665,10 @@ function handleLogin(event) {
 }
 
 function handleLogout() {
+  if (window.location.protocol !== "file:" && typeof window.__backendHandleLogout === "function") {
+    return window.__backendHandleLogout();
+  }
+
   if (state.session) {
     recordLog(state.session, "Cierre de sesion");
   }
