@@ -459,7 +459,23 @@ function renderLoginStatus() {
   }
 }
 
+function rebindAuthControlsToBackend() {
+  if (refs.loginForm) {
+    refs.loginForm.removeEventListener("submit", localHandleLogin);
+    refs.loginForm.removeEventListener("submit", handleLogin);
+    refs.loginForm.addEventListener("submit", handleLogin);
+  }
+
+  const logoutButton = document.getElementById("logoutBtn");
+  if (logoutButton) {
+    logoutButton.removeEventListener("click", localHandleLogout);
+    logoutButton.removeEventListener("click", handleLogout);
+    logoutButton.addEventListener("click", handleLogout);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  rebindAuthControlsToBackend();
   renderLoginStatus();
   initializeBackend();
 });
