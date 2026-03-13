@@ -21,6 +21,30 @@ const backendRuntime = {
   snapshotSource: "local"
 };
 
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function hydrateFromBackendWithRetry(showAuthenticatedToast, attempts = 4) {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await hydrateFromBackend(showAuthenticatedToast && attempt === 0);
+      if (state.session) {
+        return response;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await wait(180 * (attempt + 1));
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+  throw new Error("La sesion del servidor no pudo consolidarse en este navegador.");
+}
+
 function isHostedMode() {
   return window.location.protocol !== "file:";
 }
@@ -87,9 +111,10 @@ handleLogin = async function handleLoginBackend(event) {
       throw new Error(response.error || "No se pudo iniciar sesion.");
     }
 
-    await hydrateFromBackend(true);
+    await wait(150);
+    await hydrateFromBackendWithRetry(true);
     if (!state.session) {
-      throw new Error("La sesion no pudo inicializarse correctamente.");
+      throw new Error("El inicio fue aceptado, pero el navegador no pudo abrir la sesion. Revisa si este sitio tiene las cookies bloqueadas.");
     }
 
     try {
