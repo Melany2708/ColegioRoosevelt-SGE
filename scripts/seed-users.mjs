@@ -31,7 +31,8 @@ async function ensureSnapshot() {
 async function main() {
   const inputPath = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : defaultSeedPath;
   const raw = await fs.readFile(inputPath, "utf8");
-  const users = JSON.parse(raw);
+  const normalizedRaw = raw.replace(/^\uFEFF/, "");
+  const users = JSON.parse(normalizedRaw);
   if (!Array.isArray(users) || users.length === 0) {
     throw new Error("The seed file must contain at least one user.");
   }
@@ -69,3 +70,4 @@ main().catch((error) => {
   console.error(error.message);
   process.exitCode = 1;
 });
+
