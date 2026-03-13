@@ -1,7 +1,42 @@
-﻿import { countUsers, getAuthenticatedUser } from "./shared/auth.mjs";
+import { countUsers, getAuthenticatedUser } from "./shared/auth.mjs";
 import { listAuditLogs } from "./shared/audit.mjs";
-import { getSnapshot } from "./shared/snapshot.mjs";
 import { jsonResponse, methodNotAllowed } from "./shared/http.mjs";
+import { getSnapshot } from "./shared/snapshot.mjs";
+import { ACCESS_MANAGER_ROLE } from "./shared/users.mjs";
+
+function buildAccessOnlyState(source) {
+  return {
+    school: {
+      name: "Colegio Privado Roosevelt",
+      academicYear: new Date().getFullYear(),
+      city: "Lima",
+      logo: "CPR",
+      adminName: "Melanie Castro Jones",
+      theme: "roosevelt",
+      documentTemplate: "",
+      ...(source?.school || {})
+    },
+    capacities: {
+      Primaria: 120,
+      Secundaria: 90,
+      Inicial: 45,
+      ...(source?.capacities || {})
+    },
+    students: [],
+    grades: [],
+    staff: [],
+    planning: [],
+    courses: [],
+    schedules: [],
+    payments: [],
+    supplies: [],
+    activities: [],
+    documents: [],
+    attendance: [],
+    gradeTables: [],
+    simulations: []
+  };
+}
 
 export default async function handler(request) {
   if (request.method !== "GET") {
@@ -21,7 +56,8 @@ export default async function handler(request) {
     }
 
     const snapshot = await getSnapshot();
-    const logs = await listAuditLogs(100);
+    const accessOnly = auth.user.role === ACCESS_MANAGER_ROLE;
+    const logs = accessOnly ? [] : await listAuditLogs(100);
 
     return jsonResponse({
       ok: true,
@@ -30,7 +66,7 @@ export default async function handler(request) {
       setupRequired: userCount === 0,
       session: auth.session,
       user: auth.user,
-      state: snapshot.state,
+      state: accessOnly ? buildAccessOnlyState(snapshot.state) : snapshot.state,
       logs,
       snapshotSource: snapshot.source,
       snapshotUpdatedAt: snapshot.updatedAt

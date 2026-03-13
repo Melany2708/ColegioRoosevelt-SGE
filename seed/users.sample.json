@@ -24,6 +24,12 @@
     "role": "Secretaria"
   },
   {
+    "username": "accesos",
+    "password": "Cambiar-accesos-2026!",
+    "name": "Responsable de accesos",
+    "role": "Control de accesos"
+  },
+  {
     "username": "cvega",
     "password": "Cambiar-docente-2026!",
     "name": "Carlos Vega",

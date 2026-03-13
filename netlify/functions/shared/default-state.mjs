@@ -180,12 +180,12 @@ export function createDefaultAppState() {
       { studentId: "ALU-004", course: "Descubrimiento del mundo", teacher: "Elena Cruz", period: "Bimestre 1", score: 18 }
     ],
     staff: [
-      { id: "DOC-01", name: "Carlos Vega", role: "Docente", area: "Matematica", courses: "Matematica, Algebra", grades: "5° A, 2° B", schedule: "Lun a Vie 7:30 - 13:30", tenure: "2019 - actual", email: "c.vega@roosevelt.edu", phone: "" },
-      { id: "DOC-02", name: "Ana Torres", role: "Docente", area: "Comunicacion", courses: "Comunicacion", grades: "5° A, 5° B", schedule: "Lun a Vie 7:30 - 13:30", tenure: "2021 - actual", email: "a.torres@roosevelt.edu", phone: "" },
-      { id: "DOC-03", name: "Paola Medina", role: "Docente", area: "Ciencia y tecnologia", courses: "Ciencia y tecnologia", grades: "5° A, 6° A", schedule: "Lun a Vie 8:00 - 14:00", tenure: "2020 - actual", email: "p.medina@roosevelt.edu", phone: "" },
-      { id: "DOC-04", name: "Elena Cruz", role: "Docente", area: "Inicial", courses: "Comunicacion inicial, Psicomotricidad", grades: "5 anos A", schedule: "Lun a Vie 8:00 - 12:30", tenure: "2018 - actual", email: "e.cruz@roosevelt.edu", phone: "" },
-      { id: "ADM-01", name: "Andrea Rojas", role: "Secretaria", area: "Secretaria academica", courses: "-", grades: "-", schedule: "Lun a Sab 8:00 - 16:00", tenure: "2022 - actual", email: "secretaria@roosevelt.edu", phone: "" },
-      { id: "ADM-02", name: "Rosa Medina", role: "Tesoreria", area: "Caja", courses: "-", grades: "-", schedule: "Lun a Vie 8:00 - 17:00", tenure: "2023 - actual", email: "tesoreria@roosevelt.edu", phone: "" }
+      { id: "DOC-01", name: "Carlos Vega", role: "Docente", area: "Matematica", courses: "Matematica, Algebra", grades: "5° A, 2° B", schedule: "Lun a Vie 7:30 - 13:30", tenure: "2019 - actual", email: "c.vega@roosevelt.edu", phone: "", loginUsername: "cvega", authRole: "Docentes" },
+      { id: "DOC-02", name: "Ana Torres", role: "Docente", area: "Comunicacion", courses: "Comunicacion", grades: "5° A, 5° B", schedule: "Lun a Vie 7:30 - 13:30", tenure: "2021 - actual", email: "a.torres@roosevelt.edu", phone: "", loginUsername: "atorres", authRole: "Docentes" },
+      { id: "DOC-03", name: "Paola Medina", role: "Docente", area: "Ciencia y tecnologia", courses: "Ciencia y tecnologia", grades: "5° A, 6° A", schedule: "Lun a Vie 8:00 - 14:00", tenure: "2020 - actual", email: "p.medina@roosevelt.edu", phone: "", loginUsername: "pmedina", authRole: "Docentes" },
+      { id: "DOC-04", name: "Elena Cruz", role: "Docente", area: "Inicial", courses: "Comunicacion inicial, Psicomotricidad", grades: "5 anos A", schedule: "Lun a Vie 8:00 - 12:30", tenure: "2018 - actual", email: "e.cruz@roosevelt.edu", phone: "", loginUsername: "ecruz", authRole: "Docentes" },
+      { id: "ADM-01", name: "Andrea Rojas", role: "Secretaria", area: "Secretaria academica", courses: "-", grades: "-", schedule: "Lun a Sab 8:00 - 16:00", tenure: "2022 - actual", email: "secretaria@roosevelt.edu", phone: "", loginUsername: "secretaria", authRole: "Secretaria" },
+      { id: "ADM-02", name: "Rosa Medina", role: "Tesoreria", area: "Caja", courses: "-", grades: "-", schedule: "Lun a Vie 8:00 - 17:00", tenure: "2023 - actual", email: "tesoreria@roosevelt.edu", phone: "", loginUsername: "tesoreria", authRole: "Caja / tesoreria" }
     ],
     planning: [
       { teacherId: "DOC-01", teacher: "Carlos Vega", area: "Matematica", status: "Aprobada", deliveredAt: lastWeek, compliance: 100 },
@@ -347,7 +347,9 @@ export function normalizeAppState(source) {
     schedule: person.schedule || "",
     tenure: person.tenure || "Ingreso reciente",
     email: person.email || `personal${index + 1}@roosevelt.edu`,
-    phone: person.phone || ""
+    phone: person.phone || "",
+    loginUsername: person.loginUsername || "",
+    authRole: person.authRole || ""
   })) : defaults.staff;
 
   nextState.planning = Array.isArray(input.planning) ? input.planning.map((item) => ({

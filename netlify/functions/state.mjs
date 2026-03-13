@@ -1,7 +1,8 @@
-﻿import { getAuthenticatedUser } from "./shared/auth.mjs";
+import { getAuthenticatedUser } from "./shared/auth.mjs";
 import { insertAuditLog } from "./shared/audit.mjs";
-import { saveSnapshot } from "./shared/snapshot.mjs";
 import { assertSameOrigin, jsonResponse, methodNotAllowed, readJson } from "./shared/http.mjs";
+import { saveSnapshot } from "./shared/snapshot.mjs";
+import { ACCESS_MANAGER_ROLE } from "./shared/users.mjs";
 
 export default async function handler(request) {
   if (request.method !== "POST") {
@@ -13,6 +14,14 @@ export default async function handler(request) {
     const auth = await getAuthenticatedUser(request);
     if (!auth) {
       return jsonResponse({ ok: false, error: "Sesion no valida." }, 401);
+    }
+    if (auth.user.role === ACCESS_MANAGER_ROLE) {
+      return jsonResponse({
+        ok: false,
+        error: "El rol de control de accesos no puede modificar el estado academico."
+      }, 403, {
+        "set-cookie": auth.refreshCookie
+      });
     }
 
     const body = await readJson(request);

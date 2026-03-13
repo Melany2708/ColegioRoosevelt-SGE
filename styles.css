@@ -1554,3 +1554,24 @@ body[data-theme="roosevelt"] .page-backdrop {
 .public-lookup-view .simulation-result-card .chip-row {
   justify-content: center;
 }
+
+.stack-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.credential-card code,
+.notice-card code {
+  display: inline-block;
+  margin-top: 0.2rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(194, 140, 224, 0.14);
+  color: #042c4b;
+  font-weight: 700;
+}
+
+.credential-card .button-row {
+  justify-content: flex-start;
+}

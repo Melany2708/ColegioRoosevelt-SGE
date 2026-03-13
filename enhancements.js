@@ -6,6 +6,25 @@ const originalHandleDynamicChange = handleDynamicChange;
 const originalHandleDynamicClick = handleDynamicClick;
 const SCHOOL_LOGO_IMAGE = "/assets/logo-roosevelt.svg";
 const LOGIN_PREFERENCES_KEY = "sge_login_preferences_v1";
+const ACCESS_MANAGER_ROLE = "Control de accesos";
+const CREDENTIAL_ROLE_OPTIONS = ["Administrador", ACCESS_MANAGER_ROLE, "Direccion", "Secretaria", "Caja / tesoreria", "Docentes"];
+const DEFAULT_ACCESS_USERNAMES_BY_NAME = {
+  "Carlos Vega": "cvega",
+  "Ana Torres": "atorres",
+  "Paola Medina": "pmedina",
+  "Elena Cruz": "ecruz",
+  "Andrea Rojas": "secretaria",
+  "Rosa Medina": "tesoreria",
+  "Melanie Castro Jones": "admin"
+};
+
+if (!MODULES.some((moduleItem) => moduleItem.id === "credentials")) {
+  MODULES.splice(MODULES.findIndex((moduleItem) => moduleItem.id === "security"), 0, {
+    id: "credentials",
+    label: "Accesos",
+    hint: "Usuarios y contrasenas"
+  });
+}
 
 if (!MODULES.some((moduleItem) => moduleItem.id === "settings")) {
   MODULES.push({ id: "settings", label: "Ajustes", hint: "Tema y colegio" });
@@ -19,11 +38,16 @@ USERS.secretaria.name = "Andrea Rojas";
 ROLE_ACCESS.Administrador = MODULES.map((moduleItem) => moduleItem.id);
 ROLE_ACCESS.Direccion = Array.from(new Set([...(ROLE_ACCESS.Direccion || []), "settings"]));
 ROLE_ACCESS.Secretaria = Array.from(new Set([...(ROLE_ACCESS.Secretaria || []), "settings"]));
+ROLE_ACCESS[ACCESS_MANAGER_ROLE] = ["credentials"];
 
 state.documentStudentId = state.documentStudentId || null;
 state.documentType = state.documentType || "Constancia de estudios";
 state.selectedScheduleId = state.selectedScheduleId || null;
 state.supplyStudentId = state.supplyStudentId || null;
+state.credentialsDirectory = Array.isArray(state.credentialsDirectory) ? state.credentialsDirectory : [];
+state.credentialsLoaded = Boolean(state.credentialsLoaded);
+state.credentialsLoading = false;
+state.credentialsNotice = state.credentialsNotice || null;
 
 function getSavedLoginPreferences() {
   try {
@@ -55,6 +79,293 @@ function restoreLoginUsername() {
 window.sgeSaveLoginUsername = saveLoginUsername;
 window.sgeRestoreLoginUsername = restoreLoginUsername;
 
+function stripAccents(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function normalizeCredentialRole(role) {
+  const raw = String(role || "").trim();
+  if (raw === "Docente") {
+    return "Docentes";
+  }
+  if (raw === "Tesoreria") {
+    return "Caja / tesoreria";
+  }
+  return CREDENTIAL_ROLE_OPTIONS.includes(raw) ? raw : "Docentes";
+}
+
+function canManageCredentialAccounts() {
+  return [ACCESS_MANAGER_ROLE, "Administrador"].includes(String(state.session?.role || ""));
+}
+
+function normalizeCredentialUsername(value) {
+  return stripAccents(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 24);
+}
+
+function buildCredentialUsernameBase(fullName) {
+  const parts = stripAccents(fullName)
+    .toLowerCase()
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (!parts.length) {
+    return "usuario";
+  }
+
+  if (parts.length === 1) {
+    return normalizeCredentialUsername(parts[0]) || "usuario";
+  }
+
+  const initial = parts[0].slice(0, 1) || "u";
+  const surname = parts.length === 2 ? parts[1] : parts[parts.length - 2];
+  return normalizeCredentialUsername(`${initial}${surname}`) || "usuario";
+}
+
+function buildAvailableLocalUsername(fullName, preferredUsername = "") {
+  const base = normalizeCredentialUsername(preferredUsername) || buildCredentialUsernameBase(fullName);
+  let candidate = base || "usuario";
+  let suffix = 1;
+  while (USERS[candidate]) {
+    const nextSuffix = String(suffix);
+    candidate = `${base.slice(0, Math.max(1, 24 - nextSuffix.length))}${nextSuffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function generateLocalTemporaryPassword() {
+  return `Rsvt!${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function toCredentialAccount(user, index = 0) {
+  return {
+    id: user.id || `LOCAL-${index + 1}-${user.username}`,
+    username: user.username,
+    name: user.username === "admin" ? state.data?.school?.adminName || user.name : user.name,
+    role: normalizeCredentialRole(user.role),
+    isActive: true,
+    createdAt: user.createdAt || "",
+    updatedAt: user.updatedAt || ""
+  };
+}
+
+function getLocalCredentialAccounts() {
+  return Object.values(USERS)
+    .map((user, index) => toCredentialAccount(user, index))
+    .sort((left, right) => left.name.localeCompare(right.name, "es"));
+}
+
+function upsertCredentialDirectory(account) {
+  if (!account) {
+    return;
+  }
+  const index = state.credentialsDirectory.findIndex((item) => item.id === account.id || item.username === account.username);
+  if (index >= 0) {
+    state.credentialsDirectory[index] = { ...state.credentialsDirectory[index], ...account };
+  } else {
+    state.credentialsDirectory.push(account);
+  }
+  state.credentialsDirectory.sort((left, right) => left.name.localeCompare(right.name, "es"));
+}
+
+function rememberIssuedCredential(account, temporaryPassword, sourceLabel) {
+  state.credentialsNotice = {
+    username: account.username,
+    password: temporaryPassword,
+    name: account.name,
+    role: account.role,
+    sourceLabel: sourceLabel || "Acceso emitido"
+  };
+}
+
+async function loadCredentialDirectory(force = false) {
+  if (!canManageCredentialAccounts()) {
+    state.credentialsDirectory = [];
+    state.credentialsLoaded = false;
+    return [];
+  }
+  if (state.credentialsLoading) {
+    return state.credentialsDirectory;
+  }
+  if (state.credentialsLoaded && !force) {
+    return state.credentialsDirectory;
+  }
+
+  state.credentialsLoading = true;
+  try {
+    if (typeof backendRuntime !== "undefined" && backendRuntime.available && !backendRuntime.setupRequired) {
+      const response = await apiFetch("/users", { method: "GET" });
+      state.credentialsDirectory = Array.isArray(response.accounts) ? response.accounts : [];
+    } else {
+      state.credentialsDirectory = getLocalCredentialAccounts();
+    }
+    state.credentialsLoaded = true;
+    return state.credentialsDirectory;
+  } catch (error) {
+    if (typeof backendRuntime !== "undefined" && backendRuntime.available && !backendRuntime.setupRequired) {
+      state.credentialsDirectory = [];
+    } else {
+      state.credentialsDirectory = getLocalCredentialAccounts();
+    }
+    state.credentialsLoaded = true;
+    if (Date.now() - (state.credentialsLoadErrorAt || 0) > 3000) {
+      state.credentialsLoadErrorAt = Date.now();
+      showToast(error.message || "No se pudo cargar el directorio de accesos.");
+    }
+    return state.credentialsDirectory;
+  } finally {
+    state.credentialsLoading = false;
+  }
+}
+
+function findStaffByCredential(account, previousUsername = "") {
+  return state.data?.staff?.find((person) =>
+    (previousUsername && person.loginUsername === previousUsername) ||
+    (account?.username && person.loginUsername === account.username) ||
+    normalizeText(person.name) === normalizeText(account?.name || "")
+  ) || null;
+}
+
+function syncStaffCredentialReference(account, previousUsername = "") {
+  const person = findStaffByCredential(account, previousUsername);
+  if (!person || !account) {
+    return null;
+  }
+  person.loginUsername = account.username;
+  person.authRole = account.role;
+  return person;
+}
+
+function getStaffCredentialUsername(person) {
+  const account = state.credentialsDirectory.find((item) =>
+    (person.loginUsername && item.username === person.loginUsername) ||
+    normalizeText(item.name) === normalizeText(person.name)
+  );
+  return account?.username || person.loginUsername || "";
+}
+
+async function createCredentialAccount(payload) {
+  const normalizedRole = normalizeCredentialRole(payload.role);
+  if (typeof backendRuntime !== "undefined" && backendRuntime.available && !backendRuntime.setupRequired) {
+    const response = await apiFetch("/users", {
+      method: "POST",
+      body: {
+        action: "create",
+        name: payload.name,
+        role: normalizedRole,
+        username: payload.username || "",
+        password: payload.password || "",
+        linkedStaffId: payload.linkedStaffId || ""
+      }
+    });
+    upsertCredentialDirectory(response.account);
+    syncStaffCredentialReference(response.account);
+    rememberIssuedCredential(response.account, response.temporaryPassword, payload.sourceLabel || "Acceso emitido");
+    return response;
+  }
+
+  const username = buildAvailableLocalUsername(payload.name, payload.username);
+  const temporaryPassword = String(payload.password || "").trim() || generateLocalTemporaryPassword();
+  const account = {
+    username,
+    password: temporaryPassword,
+    name: payload.name,
+    role: normalizedRole,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  USERS[username] = account;
+  const publicAccount = toCredentialAccount({ ...account, id: `LOCAL-${username}` });
+  upsertCredentialDirectory(publicAccount);
+  syncStaffCredentialReference(publicAccount);
+  rememberIssuedCredential(publicAccount, temporaryPassword, payload.sourceLabel || "Acceso emitido");
+  return {
+    ok: true,
+    account: publicAccount,
+    temporaryPassword
+  };
+}
+
+async function updateCredentialAccount(payload) {
+  if (typeof backendRuntime !== "undefined" && backendRuntime.available && !backendRuntime.setupRequired) {
+    const response = await apiFetch("/users", {
+      method: "POST",
+      body: {
+        action: "update",
+        userId: payload.userId,
+        username: payload.username,
+        name: payload.name,
+        role: normalizeCredentialRole(payload.role)
+      }
+    });
+    upsertCredentialDirectory(response.account);
+    syncStaffCredentialReference(response.account, payload.currentUsername);
+    return response;
+  }
+
+  const currentUsername = payload.currentUsername;
+  const current = USERS[currentUsername];
+  if (!current) {
+    throw new Error("La cuenta seleccionada ya no existe.");
+  }
+  const nextUsername = normalizeCredentialUsername(payload.username);
+  if (!nextUsername) {
+    throw new Error("Ingresa un nombre de usuario valido.");
+  }
+  if (nextUsername !== currentUsername && USERS[nextUsername]) {
+    throw new Error("Ese nombre de usuario ya esta en uso.");
+  }
+  delete USERS[currentUsername];
+  USERS[nextUsername] = {
+    ...current,
+    username: nextUsername,
+    name: String(payload.name || current.name).trim() || current.name,
+    role: normalizeCredentialRole(payload.role || current.role),
+    updatedAt: new Date().toISOString()
+  };
+  const account = toCredentialAccount({ ...USERS[nextUsername], id: payload.userId || `LOCAL-${nextUsername}` });
+  upsertCredentialDirectory(account);
+  syncStaffCredentialReference(account, currentUsername);
+  return { ok: true, account };
+}
+
+async function setCredentialPassword(payload) {
+  if (typeof backendRuntime !== "undefined" && backendRuntime.available && !backendRuntime.setupRequired) {
+    const response = await apiFetch("/users", {
+      method: "POST",
+      body: {
+        action: payload.autoGenerate ? "reset-password" : "set-password",
+        userId: payload.userId,
+        password: payload.password || ""
+      }
+    });
+    upsertCredentialDirectory(response.account);
+    rememberIssuedCredential(response.account, response.temporaryPassword, payload.autoGenerate ? "Contrasena temporal restablecida" : "Contrasena actualizada");
+    return response;
+  }
+
+  const current = USERS[payload.currentUsername];
+  if (!current) {
+    throw new Error("La cuenta seleccionada ya no existe.");
+  }
+  const nextPassword = payload.autoGenerate ? generateLocalTemporaryPassword() : String(payload.password || "").trim();
+  if (nextPassword.length < 8) {
+    throw new Error("La contrasena debe tener al menos 8 caracteres.");
+  }
+  current.password = nextPassword;
+  current.updatedAt = new Date().toISOString();
+  const account = toCredentialAccount({ ...current, id: payload.userId || `LOCAL-${payload.currentUsername}` });
+  upsertCredentialDirectory(account);
+  rememberIssuedCredential(account, nextPassword, payload.autoGenerate ? "Contrasena temporal restablecida" : "Contrasena actualizada");
+  return { ok: true, account, temporaryPassword: nextPassword };
+}
+
 createDefaultData = function createEnhancedDefaultData() {
   return getEnhancedDefaultData();
 };
@@ -69,6 +380,7 @@ loadFromStorage = function loadFromStorageEnhanced(key, fallbackValue) {
 
 cacheDom = function cacheDomEnhanced() {
   originalCacheDom();
+  refs.sections.credentials = document.getElementById("credentialsSection");
   refs.sections.settings = document.getElementById("settingsSection");
 };
 
@@ -77,6 +389,9 @@ renderApp = function renderAppEnhanced() {
     refs.loginView.classList.remove("hidden");
     refs.appShell.classList.add("hidden");
     refs.loginForm.reset();
+    state.credentialsDirectory = [];
+    state.credentialsLoaded = false;
+    state.credentialsNotice = null;
     restoreLoginUsername();
     return;
   }
@@ -102,6 +417,10 @@ renderChrome = function renderChromeEnhanced() {
     element.setAttribute("aria-label", `Logo ${state.data.school.name}`);
     element.title = state.data.school.name;
   });
+  const searchBox = refs.globalSearch?.closest(".search-box");
+  if (searchBox) {
+    searchBox.classList.toggle("hidden", state.session?.role === ACCESS_MANAGER_ROLE);
+  }
   refs.sidebarRole.textContent = state.session.role;
   refs.sidebarUser.textContent = `${getSessionDisplayName()} (${state.session.username})`;
   refs.topbarDate.textContent = `Actualizado ${formatDateLong(new Date().toISOString())}`;
@@ -138,6 +457,7 @@ renderSections = function renderSectionsEnhanced() {
   renderActivitiesSection();
   renderReportsSection();
   renderDocumentsSection();
+  renderCredentialsSection();
   renderSecuritySection();
   renderSettingsSection();
 };
@@ -279,9 +599,10 @@ handleDynamicSubmit = function handleDynamicSubmitEnhanced(event) {
     event.preventDefault();
     const formData = new FormData(event.target);
     const role = String(formData.get("role") || "Administrativo");
+    const name = String(formData.get("name") || "").trim();
     const person = {
       id: nextStaffId(role),
-      name: String(formData.get("name") || "").trim(),
+      name,
       role,
       area: String(formData.get("area") || "").trim(),
       courses: String(formData.get("courses") || "-").trim() || "-",
@@ -289,25 +610,65 @@ handleDynamicSubmit = function handleDynamicSubmitEnhanced(event) {
       schedule: String(formData.get("schedule") || "").trim(),
       tenure: String(formData.get("tenure") || "Ingreso reciente").trim(),
       email: String(formData.get("email") || "").trim(),
-      phone: String(formData.get("phone") || "").trim()
+      phone: String(formData.get("phone") || "").trim(),
+      loginUsername: "",
+      authRole: ""
     };
 
-    state.data.staff.push(person);
-    if (role === "Docente") {
-      state.data.planning.push({
-        teacherId: person.id,
-        teacher: person.name,
-        area: person.area,
-        status: "Pendiente",
-        deliveredAt: "-",
-        compliance: 0
-      });
+    if (!person.name || !person.area || !person.email || !person.schedule) {
+      showToast("Completa nombre, area, correo y horario para registrar al personal.");
+      return;
     }
 
-    persistData();
-    recordLog(state.session, `Registro de personal ${person.name}`);
-    renderStaffSection();
-    showToast("Personal registrado correctamente.");
+    const finalizeStaffRegistration = (credentialResult = null) => {
+      if (credentialResult?.account) {
+        person.loginUsername = credentialResult.account.username;
+        person.authRole = credentialResult.account.role;
+      }
+
+      state.data.staff.push(person);
+      if (role === "Docente") {
+        state.data.planning.push({
+          teacherId: person.id,
+          teacher: person.name,
+          area: person.area,
+          status: "Pendiente",
+          deliveredAt: "-",
+          compliance: 0
+        });
+      }
+
+      persistData();
+      recordLog(state.session, `Registro de personal ${person.name}`);
+      renderStaffSection();
+      if (canManageCredentialAccounts()) {
+        loadCredentialDirectory(true).then(() => renderCredentialsSection());
+      }
+      showToast(role === "Docente" && credentialResult?.account
+        ? "Docente registrado con usuario y contrasena temporal generados."
+        : "Personal registrado correctamente.");
+    };
+
+    if (role === "Docente") {
+      if (!canManageCredentialAccounts()) {
+        showToast("Para registrar docentes con acceso al sistema, inicia sesion como Administracion o Control de accesos.");
+        return;
+      }
+
+      createCredentialAccount({
+        name: person.name,
+        role: "Docentes",
+        linkedStaffId: person.id,
+        sourceLabel: "Credenciales generadas al registrar docente"
+      }).then((credentialResult) => {
+        finalizeStaffRegistration(credentialResult);
+      }).catch((error) => {
+        showToast(error.message || "No se pudo generar el acceso del docente.");
+      });
+      return;
+    }
+
+    finalizeStaffRegistration();
     return;
   }
 
@@ -916,7 +1277,9 @@ function getEnhancedDefaultData() {
   base.staff = base.staff.map((person) => ({
     ...person,
     email: String(person.email || "").replace("horizonte.edu", "roosevelt.edu"),
-    phone: person.phone || ""
+    phone: person.phone || "",
+    loginUsername: person.loginUsername || DEFAULT_ACCESS_USERNAMES_BY_NAME[person.name] || "",
+    authRole: person.authRole || (DEFAULT_ACCESS_USERNAMES_BY_NAME[person.name] ? normalizeCredentialRole(person.role) : "")
   }));
 
   base.schedules = base.schedules.map((schedule, index) => ({
@@ -973,7 +1336,9 @@ function hydrateData(sourceData) {
       schedule: person.schedule || "",
       tenure: person.tenure || "Ingreso reciente",
       email: person.email || `personal${index + 1}@roosevelt.edu`,
-      phone: person.phone || ""
+      phone: person.phone || "",
+      loginUsername: String(person.loginUsername || DEFAULT_ACCESS_USERNAMES_BY_NAME[person.name] || ""),
+      authRole: String(person.authRole || (person.loginUsername || DEFAULT_ACCESS_USERNAMES_BY_NAME[person.name] ? normalizeCredentialRole(person.role) : ""))
     }))
     : base.staff;
 
@@ -1088,7 +1453,8 @@ Object.assign(USERS, {
   cvega: { username: "cvega", password: "gestion-servidor", name: "Carlos Vega", role: "Docentes" },
   atorres: { username: "atorres", password: "gestion-servidor", name: "Ana Torres", role: "Docentes" },
   pmedina: { username: "pmedina", password: "gestion-servidor", name: "Paola Medina", role: "Docentes" },
-  ecruz: { username: "ecruz", password: "gestion-servidor", name: "Elena Cruz", role: "Docentes" }
+  ecruz: { username: "ecruz", password: "gestion-servidor", name: "Elena Cruz", role: "Docentes" },
+  accesos: { username: "accesos", password: "gestion-servidor", name: "Responsable de accesos", role: ACCESS_MANAGER_ROLE }
 });
 
 const previousHydrateData = hydrateData;
@@ -1476,40 +1842,167 @@ renderPlanningSection = function renderPlanningSectionEnhanced() {
   `;
 };
 
-renderSecuritySection = function renderSecuritySectionEnhanced() {
-  const recentLogs = [...state.logs].slice(-8).reverse();
-  const teacherAccounts = Object.values(USERS).filter((user) => user.role === "Docentes" || user.role === "Administrador" || user.role === "Direccion");
+renderCredentialsSection = function renderCredentialsSectionManaged() {
+  if (!refs.sections.credentials) {
+    return;
+  }
 
-  refs.sections.security.innerHTML = `
-    ${renderSectionHeader("Seguridad y accesos", "Aqui puedes revisar accesos recientes y las credenciales de ingreso disponibles para administracion y docentes.")}
+  if (!canManageCredentialAccounts()) {
+    refs.sections.credentials.innerHTML = `
+      <article class="empty-card">
+        <h3>Modulo restringido</h3>
+        <p>La administracion de usuarios y contrasenas esta disponible solo para Administracion y Control de accesos.</p>
+      </article>
+    `;
+    return;
+  }
+
+  if (!state.credentialsLoaded && !state.credentialsLoading) {
+    loadCredentialDirectory(true).then(() => renderCredentialsSection());
+  }
+
+  const accounts = state.credentialsDirectory || [];
+  const teacherAccounts = accounts.filter((item) => item.role === "Docentes");
+  const accessManagers = accounts.filter((item) => item.role === ACCESS_MANAGER_ROLE);
+  const credentialNotice = state.credentialsNotice
+    ? `
+      <article class="notice-card">
+        <p><strong>${escapeHtml(state.credentialsNotice.sourceLabel || "Acceso emitido")}</strong></p>
+        <p>${escapeHtml(state.credentialsNotice.name)} · ${escapeHtml(state.credentialsNotice.role)}</p>
+        <p><strong>Usuario:</strong> <code>${escapeHtml(state.credentialsNotice.username)}</code></p>
+        <p><strong>Contrasena temporal:</strong> <code>${escapeHtml(state.credentialsNotice.password)}</code></p>
+        <div class="button-row">
+          <button class="button button-secondary" type="button" data-copy-value="${encodeURIComponent(state.credentialsNotice.username)}">Copiar usuario</button>
+          <button class="button button-primary" type="button" data-copy-value="${encodeURIComponent(state.credentialsNotice.password)}">Copiar contrasena</button>
+          <button class="button button-soft" type="button" data-dismiss-credential-notice="true">Ocultar</button>
+        </div>
+      </article>
+    `
+    : "";
+
+  refs.sections.credentials.innerHTML = `
+    ${renderSectionHeader("Accesos institucionales", "Genera usuarios, actualiza nombres de acceso y restablece contrasenas desde un modulo separado y restringido.")}
+
+    <div class="inline-metrics">
+      <span class="tag">${accounts.length} cuentas activas</span>
+      <span class="tag">${teacherAccounts.length} cuentas docentes</span>
+      <span class="tag">${accessManagers.length} gestores de accesos</span>
+      <span class="tag">${state.credentialsLoading ? "Sincronizando..." : "Directorio listo"}</span>
+    </div>
+
+    ${credentialNotice}
 
     <div class="split-panel">
-      <article class="table-card">
-        <h3>Credenciales de acceso</h3>
+      <article class="glass-card">
+        <h3>Crear acceso</h3>
+        <form id="credentialCreateForm" class="form-grid">
+          <label class="field">
+            <span>Nombre completo</span>
+            <input name="name" type="text" required>
+          </label>
+          <label class="field">
+            <span>Rol de acceso</span>
+            <select name="role">
+              ${CREDENTIAL_ROLE_OPTIONS.map((role) => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Usuario</span>
+            <input name="username" type="text" placeholder="Opcional, se genera automaticamente">
+          </label>
+          <label class="field">
+            <span>Contrasena temporal</span>
+            <input name="password" type="text" placeholder="Opcional, se genera automaticamente">
+          </label>
+          <p class="helper-text field-full">Usa este formulario para crear tambien la cuenta exclusiva del rol <strong>${escapeHtml(ACCESS_MANAGER_ROLE)}</strong>.</p>
+          <div class="field field-full">
+            <button class="button button-primary" type="submit">Crear acceso</button>
+          </div>
+        </form>
+      </article>
+
+      <article class="glass-card">
+        <h3>Indicaciones</h3>
         <div class="notice-card">
-          <p>Para que cualquier persona entre solo mediante enlace, este proyecto debe publicarse en un hosting o servidor web. La aplicacion ya esta preparada como sitio estatico, pero desde aqui no puedo desplegarla a internet sin acceso al hosting.</p>
+          <p>Cuando se registra un docente desde el modulo de personal, el sistema genera automaticamente su usuario y una contrasena temporal.</p>
+          <p>Por seguridad, las contrasenas antiguas no se listan en pantalla. Solo se muestran al crear o restablecer una cuenta.</p>
+          <p>Si necesitas una persona dedicada solo a accesos, crea una cuenta con el rol <strong>${escapeHtml(ACCESS_MANAGER_ROLE)}</strong>.</p>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Usuario</th>
-                <th>Contrasena</th>
-                <th>Nombre</th>
-                <th>Rol</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${teacherAccounts.map((user) => `
-                <tr>
-                  <td>${escapeHtml(user.username)}</td>
-                  <td>${escapeHtml(user.password)}</td>
-                  <td>${escapeHtml(user.username === "admin" ? state.data.school.adminName : user.name)}</td>
-                  <td>${escapeHtml(user.role)}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
+      </article>
+    </div>
+
+    <div class="stack-grid">
+      ${accounts.map((account) => `
+        <article class="glass-card credential-card">
+          <div class="section-heading">
+            <p class="eyebrow">${escapeHtml(account.role)}</p>
+            <h3>${escapeHtml(account.name)}</h3>
+            <p class="supporting-copy">Usuario actual: <strong>${escapeHtml(account.username)}</strong></p>
+          </div>
+
+          <div class="inline-metrics">
+            <span class="tag">${account.isActive ? "Activo" : "Inactivo"}</span>
+            <span class="tag">Actualizado ${escapeHtml(account.updatedAt ? formatDateLong(account.updatedAt) : "sin fecha")}</span>
+          </div>
+
+          <form class="form-grid" data-credential-update-form="true">
+            <input type="hidden" name="userId" value="${escapeHtml(account.id)}">
+            <input type="hidden" name="currentUsername" value="${escapeHtml(account.username)}">
+            <label class="field">
+              <span>Nombre</span>
+              <input name="name" type="text" value="${escapeHtml(account.name)}" required>
+            </label>
+            <label class="field">
+              <span>Usuario</span>
+              <input name="username" type="text" value="${escapeHtml(account.username)}" required>
+            </label>
+            <label class="field">
+              <span>Rol</span>
+              <select name="role">
+                ${CREDENTIAL_ROLE_OPTIONS.map((role) => `<option value="${escapeHtml(role)}" ${role === account.role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}
+              </select>
+            </label>
+            <div class="field">
+              <span>Accion rapida</span>
+              <div class="button-row">
+                <button class="button button-secondary" type="button" data-copy-value="${encodeURIComponent(account.username)}">Copiar usuario</button>
+                <button class="button button-primary" type="submit">Guardar acceso</button>
+              </div>
+            </div>
+          </form>
+
+          <form class="form-grid" data-credential-password-form="true">
+            <input type="hidden" name="userId" value="${escapeHtml(account.id)}">
+            <input type="hidden" name="currentUsername" value="${escapeHtml(account.username)}">
+            <label class="field field-full">
+              <span>Nueva contrasena manual</span>
+              <input name="password" type="text" minlength="8" placeholder="Escribe una nueva contrasena o usa el restablecimiento automatico">
+            </label>
+            <div class="field field-full">
+              <div class="button-row">
+                <button class="button button-secondary" type="submit">Guardar contrasena</button>
+                <button class="button button-primary" type="button" data-reset-credential-password="${escapeHtml(account.id)}" data-current-username="${escapeHtml(account.username)}">Restablecer temporal</button>
+              </div>
+            </div>
+          </form>
+        </article>
+      `).join("") || '<article class="empty-card"><h3>Sin cuentas registradas</h3><p>Crea el primer acceso institucional desde este panel.</p></article>'}
+    </div>
+  `;
+};
+
+renderSecuritySection = function renderSecuritySectionEnhanced() {
+  const recentLogs = [...state.logs].slice(-8).reverse();
+
+  refs.sections.security.innerHTML = `
+    ${renderSectionHeader("Seguridad y auditoria", "Consulta la bitacora reciente y manten la administracion de usuarios separada en el modulo de Accesos.")}
+
+    <div class="split-panel">
+      <article class="glass-card">
+        <h3>Buenas practicas aplicadas</h3>
+        <div class="notice-card">
+          <p>Las contrasenas ya no se muestran desde este modulo. Toda la gestion de usuarios y restablecimientos se realiza en <strong>Accesos</strong>.</p>
+          <p>El login sigue validandose con el servidor y las sesiones continuan bajo control del backend.</p>
         </div>
       </article>
 
@@ -1533,7 +2026,7 @@ renderSecuritySection = function renderSecuritySectionEnhanced() {
                   <td>${escapeHtml(logItem.role)}</td>
                   <td>${escapeHtml(logItem.action)}</td>
                 </tr>
-              `).join("")}
+              `).join("") || '<tr><td colspan="4">No hay eventos recientes.</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -1942,15 +2435,28 @@ renderAdmissionsSection = function renderAdmissionsSectionEnhancedCrud() {
 renderStaffSection = function renderStaffSectionEnhancedCrud() {
   const totalTeachers = state.data.staff.filter((person) => person.role === "Docente").length;
   const totalAdministrative = state.data.staff.length - totalTeachers;
+  const canGenerateTeacherAccess = canManageCredentialAccounts();
+  const credentialNotice = state.credentialsNotice && state.credentialsNotice.sourceLabel
+    ? `
+      <article class="notice-card">
+        <p><strong>${escapeHtml(state.credentialsNotice.sourceLabel)}</strong></p>
+        <p>${escapeHtml(state.credentialsNotice.name)} · ${escapeHtml(state.credentialsNotice.role)}</p>
+        <p><strong>Usuario:</strong> <code>${escapeHtml(state.credentialsNotice.username)}</code></p>
+        <p><strong>Contrasena temporal:</strong> <code>${escapeHtml(state.credentialsNotice.password)}</code></p>
+      </article>
+    `
+    : "";
 
   refs.sections.staff.innerHTML = `
-    ${renderSectionHeader("Docentes y personal", "Registro y eliminacion de docentes y personal administrativo.")}
+    ${renderSectionHeader("Docentes y personal", "Registro y eliminacion de docentes y personal administrativo. Los docentes pueden salir con acceso generado automaticamente.")}
 
     <div class="inline-metrics">
       <span class="tag">${totalTeachers} docentes</span>
       <span class="tag">${totalAdministrative} administrativos</span>
       <span class="tag">${state.data.staff.length} registros activos</span>
     </div>
+
+    ${credentialNotice}
 
     <div class="split-panel">
       <article class="glass-card">
@@ -1998,6 +2504,11 @@ renderStaffSection = function renderStaffSectionEnhancedCrud() {
             <span>Historial laboral</span>
             <input name="tenure" type="text" placeholder="2026 - actual">
           </label>
+          <p class="helper-text field-full">
+            ${canGenerateTeacherAccess
+              ? "Si eliges Docente, se creara automaticamente su usuario institucional y una contrasena temporal."
+              : "Solo Administracion y Control de accesos pueden emitir automaticamente credenciales para docentes."}
+          </p>
           <div class="field field-full">
             <button class="button button-primary" type="submit">Registrar personal</button>
           </div>
@@ -2023,7 +2534,7 @@ renderStaffSection = function renderStaffSectionEnhancedCrud() {
               ${state.data.staff.map((person) => `
                 <tr>
                   <td>${escapeHtml(person.id)}</td>
-                  <td>${escapeHtml(person.name)}<br><small>${escapeHtml(person.email)}</small></td>
+                  <td>${escapeHtml(person.name)}<br><small>${escapeHtml(person.email)}</small>${getStaffCredentialUsername(person) ? `<br><small>Usuario: ${escapeHtml(getStaffCredentialUsername(person))}</small>` : ""}</td>
                   <td>${escapeHtml(person.role)}</td>
                   <td>${escapeHtml(person.area)}</td>
                   <td>${escapeHtml(`${person.courses} · ${person.grades}`)}</td>
@@ -3012,6 +3523,87 @@ handleDynamicChange = function handleDynamicChangeDirection(event) {
 
 const previousHandleDynamicSubmitDirection = handleDynamicSubmit;
 handleDynamicSubmit = async function handleDynamicSubmitDirection(event) {
+  if (event.target.id === "credentialCreateForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const name = String(formData.get("name") || "").trim();
+    const role = String(formData.get("role") || "Docentes");
+
+    if (!name) {
+      showToast("Ingresa el nombre completo para crear la cuenta.");
+      return;
+    }
+
+    try {
+      await createCredentialAccount({
+        name,
+        role,
+        username: String(formData.get("username") || "").trim(),
+        password: String(formData.get("password") || "").trim(),
+        sourceLabel: "Acceso creado manualmente"
+      });
+      if (state.session?.role === "Administrador") {
+        persistData();
+      }
+      event.target.reset();
+      await loadCredentialDirectory(true);
+      renderCredentialsSection();
+      showToast("Acceso creado correctamente.");
+    } catch (error) {
+      showToast(error.message || "No se pudo crear la cuenta.");
+    }
+    return;
+  }
+
+  if (event.target.matches("[data-credential-update-form]")) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    try {
+      await updateCredentialAccount({
+        userId: String(formData.get("userId") || ""),
+        currentUsername: String(formData.get("currentUsername") || ""),
+        username: String(formData.get("username") || "").trim(),
+        name: String(formData.get("name") || "").trim(),
+        role: String(formData.get("role") || "Docentes")
+      });
+      if (state.session?.role === "Administrador") {
+        persistData();
+      }
+      await loadCredentialDirectory(true);
+      renderCredentialsSection();
+      showToast("Datos de acceso actualizados.");
+    } catch (error) {
+      showToast(error.message || "No se pudo actualizar la cuenta.");
+    }
+    return;
+  }
+
+  if (event.target.matches("[data-credential-password-form]")) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const password = String(formData.get("password") || "").trim();
+    if (password.length < 8) {
+      showToast("La contrasena manual debe tener al menos 8 caracteres.");
+      return;
+    }
+
+    try {
+      await setCredentialPassword({
+        userId: String(formData.get("userId") || ""),
+        currentUsername: String(formData.get("currentUsername") || ""),
+        password,
+        autoGenerate: false
+      });
+      event.target.reset();
+      await loadCredentialDirectory(true);
+      renderCredentialsSection();
+      showToast("Contrasena actualizada correctamente.");
+    } catch (error) {
+      showToast(error.message || "No se pudo actualizar la contrasena.");
+    }
+    return;
+  }
+
   if (event.target.id === "attendanceForm") {
     event.preventDefault();
     const formData = new FormData(event.target);
@@ -3194,6 +3786,50 @@ handleDynamicSubmit = async function handleDynamicSubmitDirection(event) {
 
 const previousHandleDynamicClickDirection = handleDynamicClick;
 handleDynamicClick = function handleDynamicClickDirection(event) {
+  const dismissCredentialNoticeButton = event.target.closest("[data-dismiss-credential-notice]");
+  if (dismissCredentialNoticeButton) {
+    state.credentialsNotice = null;
+    renderCredentialsSection();
+    return;
+  }
+
+  const copyValueButton = event.target.closest("[data-copy-value]");
+  if (copyValueButton) {
+    const value = decodeURIComponent(copyValueButton.dataset.copyValue || "");
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(value).then(() => {
+        showToast("Dato copiado al portapapeles.");
+      }).catch(() => {
+        showToast("No se pudo copiar automaticamente. Intenta otra vez.");
+      });
+    } else {
+      window.prompt("Copia el valor:", value);
+    }
+    return;
+  }
+
+  const resetCredentialPasswordButton = event.target.closest("[data-reset-credential-password]");
+  if (resetCredentialPasswordButton) {
+    const userId = resetCredentialPasswordButton.dataset.resetCredentialPassword || "";
+    const currentUsername = resetCredentialPasswordButton.dataset.currentUsername || "";
+    if (!window.confirm(`Se generara una nueva contrasena temporal para ${currentUsername}. Deseas continuar?`)) {
+      return;
+    }
+    setCredentialPassword({
+      userId,
+      currentUsername,
+      password: "",
+      autoGenerate: true
+    }).then(async () => {
+      await loadCredentialDirectory(true);
+      renderCredentialsSection();
+      showToast("Contrasena temporal restablecida.");
+    }).catch((error) => {
+      showToast(error.message || "No se pudo restablecer la contrasena.");
+    });
+    return;
+  }
+
   const openPublicButton = event.target.closest("[data-open-public-simulations]");
   if (openPublicButton) {
     openPublicSimulationRoute();
